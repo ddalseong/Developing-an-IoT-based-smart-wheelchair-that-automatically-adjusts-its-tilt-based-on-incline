@@ -68,6 +68,8 @@ void loop() {
   controlAutoLight();
   detectObstacleAndStop();
   detectOverspeedAndStop();
+
+  printDebugInfo();
 }
 
 // 압력 센서 및 안전벨트 스위치 확인 함수
@@ -113,7 +115,7 @@ void detectFallAndSendAlert() {
   int angle = calculateAngle(filteredAccelValue);
 
   if (isTilted && angle > 90) {
-    sendEmergencyAlert();
+    sendEmergencyAlert(1);
   }
 }
 
@@ -226,9 +228,35 @@ void measureSpeed() {
 }
 
 // 비상 경보 전송 함수
-void sendEmergencyAlert() {
-  //클라우드 전송
-  Serial.println("비상 경보: 휠체어 넘어짐 감지됨!");
+void sendEmergencyAlert(bool felldown) {
+  float gpsLocation[2] = {0,0};
+  String message;
+  String sum;
+  char sLatF[15];
+  char sLongF[15];
+  dtostrf(gpsLocation[0],11,6,sLatF);
+  dtostrf(gpsLocation[1],11,6,sLongF);
+  if(felldown){
+    sum = "T,";
+  }
+  else{
+    sum = "F,";
+  }
+  sum += sLatF;
+  sum += ",";
+  sum += sLongF;
+  //sum += ",";
+  message = sum.length();
+  message += ",";
+  message += sum;
+  Serial.println(message);
+  sendMessage(message);
+}
+
+void sendMessage(String message){ //미니보드 전송
+  Wire.beginTransmission(1);
+  Wire.write(message.c_str());
+  Wire.endTransmission(1);
 }
 
 // 테스트 및 디버깅을 위한 시리얼 출력 함수
