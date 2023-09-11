@@ -1,13 +1,4 @@
-오토라이트 기능 (수정)
-오후 3시 270~320 정도의 빛 
-
-오후 6시 410~ 490 정도의 빛 (어두워지기 시작해서 켜져야 된다고 판단)
-
-실내에서 (형광등ON) 945~964
-실내에서 (형광등OFF) 1018~1020
-
-
-코드 
+오토라이트 기능
 const int PRegistor = A0;
 
 void setup(){
@@ -28,15 +19,7 @@ void loop(){
     digitalWrite( 7, LOW);
   }
 }
-
-참고 https://www.youtube.com/watch?v=T3LzJBsYCSE&t=1s
-
-릴레이 활용 DC모터 제어 코드 
-
-과속감지 긴급정지 기능 
-바퀴의 크기에 따라 RPM을 측정하는 코드 
-현재 설정은 바퀴둘레 15cm가 회전을 하며 15km로 넘어가면 모터를 작동하여 10초간 정지하는 설정을 주었다) 앞에 주석 처리한 모터 B_B1이 자주 에러가 난다. 확인이 필요) 그 밖에 다른 부분은 문제없이 돌아간다.
-
+과속감지 긴급정지 기능
 const int sensorPin = 2;    // 마그네틱 센서 입력 핀
 float wheelCircumference = 15; // 바퀴의 둘레 길이
 unsigned long lastTime;     // 마지막 RPM 측정 시간
@@ -87,23 +70,7 @@ void loop() {
 void countPulses() {
   pulseCount++;  // 펄스 수 증가
 }
-
-장애물감지 및 충돌방지/긴급정지 기능 개발 (테스트까지 완료)
-
-필요 모터1개, 모터 드라이버 1개 초음파센서, 부저, 12V배터리
-
-초음파센서 
-GND - GND
-VCC - 5V
-Echo - 8 PIN
-Trigger - 9 PIN
-모터  10, 11 PIN ( 8~13 INPUT, 7~2 OUTPUT)
-
-부저 
-마이너스 부분을 GND로 연결
-플러스 부분을 7 PIN으로 연결 
-    
-  
+장애물 감지 및 충돌방지/긴급정지 기능
 int triggerPin = 9;
 int echoPin = 8;
 int buzzerPin = 7;
