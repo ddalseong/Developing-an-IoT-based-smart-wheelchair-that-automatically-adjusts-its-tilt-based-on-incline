@@ -1,0 +1,138 @@
+#define FSRCount 4 //센서 수
+int FSRsensors[FSRCount] = {A0,A1,A2,A3};
+int values[FSRCount] = {0,0,0,0};
+bool sit[FSRCount] = {false,false,false,false}; // 없어도 될 수도..
+bool state = false;
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  while(state == isSit());
+  Serial.print("Sit in setup");
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  //state = isSit();
+  //Serial.print("is Sit? ::::: ");
+  //Serial.println(state);
+}
+
+//4개의 압력 센서 값 읽기
+void getFSR(){
+  int i=0;
+  for(i= 0;i<FSRCount;i++){
+      values[i] = analogRead(FSRsensors[i]);
+      Serial.print("FSR");
+    Serial.print(i);
+    Serial.print(" : ");
+      Serial.println(values[i]);
+  }
+  delay(1000);
+  return;
+}
+
+
+//앉았는지 확인.. 4개의 값 모두 400 초과이면 true
+bool isSit(){
+  int i;
+  getFSR();
+  for(i=0;i<FSRCount;i++){
+    if(values[i] > 400){
+      sit[i] = true;
+    }
+    else{
+      sit[i] = false;
+    }
+  }
+  for(i=0;i<FSRCount;i++){
+    if(sit[i]==false){
+      return false;
+    }
+  }
+  return true;
+}
+/*
+ *  add WiFIEsp library 
+ *  **change***
+ *  0506-0523  connecting auto promised WiFi
+ /
+
+
+///////////////////////////////////////////////////
+#include<WiFiEsp.h> //?
+#include <SoftwareSerial.h>
+
+#define RX 2
+#define TX 3
+#define ssid ""
+#define pass ""
+
+SoftwareSerial ESP01(RX,TX);
+int status = WL_IDLE_STATUS;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  ESP01.begin(9600);
+  ESP01.setTimeout(5000);
+  WiFi.init(&ESP01); //initialize ESP module
+  while( status !=WL_CONNECTED){
+    Serial.print(F("Attempting to connect to WPA SSID: "));
+    Serial.println(ssid);
+    status = WiFi.begin(ssid,pass); // Connect to WPA/WPA2 network
+    IPAddress ip = WiFi.localIP();
+    Serial.print("IP Address: ");
+    Serial.println(ip);
+  }
+  delay(1000);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  if(Serial.available()){
+    ESP01.write(Serial.read());
+  }
+  if(ESP01.available()){
+    Serial.write(ESP01.read());
+  }
+}
+
+
+/
+ * 
+void setWifi(){
+  Serial.begin(9600);
+  ESP01.begin(9600);
+  ESP01.setTimeout(5000);
+  WiFi.init(&ESP01); //initialize ESP module
+  while( status !=WL_CONNECTED){ //for 10seconds,,,,, maybe this 'while' is not demanded
+    Serial.print(F("Attempting to connect to WPA SSID: "));
+    Serial.println(ssid);
+    status = WiFi.begin(ssid,pass); // Connect to WPA/WPA2 network
+    IPAddress ip = WiFi.localIP();
+    Serial.print("IP Address: ");
+    Serial.println(ip);
+  }
+  delay(1000);
+}
+
+*/
+
+///////////////////////////////////////////////
+#include <SoftwareSerial.h>
+SoftwareSerial gps(11,12);
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  gps.begin(9600);
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  if(gps.available()){
+    Serial.write(gps.read());
+  }
+
+}
