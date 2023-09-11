@@ -73,3 +73,59 @@ bool checkBelt(){
     return false;
   }
 }
+gps 센서 감지 및 위도 경도 추출 함수 코드
+방법 1 (라이브러리 이용)
+#include <SoftwareSerial.h>
+SoftwareSerial gps(11,12);
+
+gps.begin(9600);
+
+while (ss.available() > 0){
+  gps.encode(ss.read());
+  if (gps.location.isUpdated()){
+    Serial.print("Latitude= "); 
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(" Longitude= "); 
+    Serial.println(gps.location.lng(), 6)
+  }
+}
+방법 2 (계산식을 이용한 1차 적인 방법)
+#include <SoftwareSerial.h>
+// tx 10 rx 11
+SoftwareSerial gpsSerial(10,11);
+
+char c ="";
+String str ="";
+String targetStr = "GPGGA";
+
+gpsSerial.begin(9600);
+  if(gpsSerial.available()){
+    c=gpsSerial.read(); // 센서값 읽기
+    if(c=='\n'){
+      if(targetStr.equals(str.substring(1,6))){
+        //NMEA의 GPGGA 같을 때
+        Serial.println(str);
+        int one = str.indexOf(",");
+        int two = str.indexOf(",",one+1);
+        int three = str.indexOf(",",two+1);
+        int four = str.indexOf(",",three+1);
+        int five = str.indexOf(",",four+1);
+
+        String Lat = str.substring(two+1,three);
+        String Long = str.substring(four+1,five);
+
+        String Lat1 = Lat.substring(0,2);
+        String Lat2 = Lat.substring(2);
+
+        String Long1 = Long.substring(0,3);
+        String Long2 = Long.substring(3);
+
+        double LatF = Lat1.toDouble() + Lat2.toDouble()/60;
+        double LongF = Long1.toFloat() + Long2.toFloat()/60;
+      }
+      str = ""; //초기화
+    }
+    else{
+      str +=c;
+    }
+}
