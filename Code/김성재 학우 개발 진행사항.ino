@@ -1,0 +1,131 @@
+#include <Wire.h>
+
+// 센서 및 릴레이 핀 정의
+const int lightSensor = A2;
+const int speedSensor = 4;
+const int ultrasonicTrigger = 5;
+const int ultrasonicEcho = 6;
+const int ledPin = 15;
+
+const int relay5 = 11;
+const int relay6 = 12;
+const int relay7 = 13;
+const int relay8 = 14;
+
+const float wheelDiameter = 0.5;  // 바퀴 지름 (미터)
+const float wheelCircumference = wheelDiameter * 3.14159;
+const int thresholdAngle = 10;  // 기울기 임계값 (도)
+const int thresholdSpeed = 10;  // 속도 임계값 (km/h)
+
+// 속도 측정 변수
+unsigned long prevMillis = 0;
+float currentSpeed = 0;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(speedSensor, INPUT);
+  pinMode(lightSensor, INPUT);
+  pinMode(ultrasonicTrigger, OUTPUT);
+  pinMode(ultrasonicEcho, INPUT);
+
+  for (int i = relay5; i <= relay8; i++) {
+    pinMode(i, OUTPUT);
+    digitalWrite(i, LOW);
+  }
+
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+}
+
+void loop() {
+  controlAutoLight();
+  detectObstacleAndStop();
+  detectOverspeedAndStop();
+}
+
+// 오토 라이트 제어 함수
+void controlAutoLight() {
+
+}
+
+// 장애물 감지 및 충돌 방지/긴급 정지 함수
+void detectObstacleAndStop() {
+
+}
+
+// 과속 감지 및 긴급 정지 함수
+void detectOverspeedAndStop() {
+
+}
+
+// 노이즈 필터링 함수
+int filterNoise(int rawValue) {
+  static int values[10];
+  static int index = 0;
+  static int sum = 0;
+
+  sum -= values[index];
+  values[index] = rawValue;
+  sum += values[index];
+
+  index = (index + 1) % 10;
+
+  return sum / 10;
+}
+
+// 브레이크 적용 함수
+void applyBrakes() {
+  digitalWrite(relay5, HIGH);
+  digitalWrite(relay6, LOW);
+  digitalWrite(relay7, HIGH);
+  digitalWrite(relay8, LOW);
+}
+
+// 브레이크 해제 함수
+void releaseBrakes() {
+  digitalWrite(relay5, LOW);
+  digitalWrite(relay6, HIGH);
+  digitalWrite(relay7, LOW);
+  digitalWrite(relay8, HIGH);
+}
+
+// 거리 측정 함수
+long measureDistance() {
+  digitalWrite(ultrasonicTrigger, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultrasonicTrigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ultrasonicTrigger, LOW);
+
+  long duration = pulseIn(ultrasonicEcho, HIGH);
+  long distance = (duration / 2) / 29.1;
+
+  return distance;
+}
+
+// 속도 측정 함수
+void measureSpeed() {
+  unsigned long currentMillis = millis();
+
+  if (digitalRead(speedSensor) == HIGH && prevMillis == 0) {
+    prevMillis = currentMillis;
+  } else if (digitalRead(speedSensor) == LOW && prevMillis > 0) {
+    unsigned long timeElapsed = currentMillis - prevMillis;
+    float speed = (wheelCircumference / timeElapsed) * 1000;  // m/s로 변환
+    currentSpeed = speed;
+    prevMillis = 0;
+  }
+}
+// 테스트 및 디버깅을 위한 시리얼 출력 함수
+void printDebugInfo() {
+  Serial.print("조도 센서: ");
+  Serial.println(analogRead(lightSensor));
+  Serial.print("속도 센서: ");
+  Serial.println(digitalRead(speedSensor));
+  Serial.print("거리: ");
+  Serial.println(measureDistance());
+  Serial.print("속도: ");
+  Serial.println(currentSpeed);
+  delay(1000);
+}
