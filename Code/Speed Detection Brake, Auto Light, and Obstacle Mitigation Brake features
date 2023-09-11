@@ -1,195 +1,169 @@
-과속감지 긴급정지 기능 개발 (원주율 확인 필요)
+#include <Wire.h>
 
-const int sensorPin = 2;       // 마그네틱 센서 입력 핀
-const float wheelDiameter = 26.0;  // 바퀴의 지름 (단위: 센티미터)
-float wheelCircumference; // 바퀴의 둘레 (센치미터)
-unsigned long lastTime;      // 마지막 RPM 측정 시간
-volatile int pulseCount;     // 마그네틱 센서에서 인식된 펄스 수
-float rpm;                   // 회전 속도 (RPM)
-const float pi = 3.14159265359; //원주율 값
-float speedKmPerHour;
-int conversionFactor = 60 * 60 * 1000;
-int relay1Pin = 3; //릴레이 1번 모터 연결
-int relay2Pin = 4; //릴레이 1번 모터 연결
-int relay3Pin = 5; //릴레이 2번 모터 연결
-int relay4Pin = 6; //릴레이 2번 모터 연결
+// 센서 및 릴레이 핀 정의
+const int lightSensor = A2;
+const int speedSensor = 4;
+const int ultrasonicTrigger = 5;
+const int ultrasonicEcho = 6;
+const int ledPin = 15;
+const int ultrasonicTrigger1 = 16;
+const int ultrasonicEcho1 = 17;
+
+const int relay5 = 11;
+const int relay6 = 12;
+const int relay7 = 13;
+const int relay8 = 14;
+
+
+const float wheelDiameter = 0.5;  // 바퀴 지름 (미터)
+const float wheelCircumference = wheelDiameter * 3.14159;
+const int thresholdAngle = 10;  // 기울기 임계값 (도)
+const int thresholdSpeed = 10;  // 속도 임계값 (km/h)
+
+// 속도 측정 변수
+unsigned long prevMillis = 0;
+float currentSpeed = 0;
 
 void setup() {
-  pinMode(relay1Pin, OUTPUT);
-  pinMode(relay2Pin, OUTPUT);
-  pinMode(relay3Pin, OUTPUT);
-  pinMode(relay4Pin, OUTPUT);
- 
-  pinMode(sensorPin, INPUT_PULLUP);  // 마그네틱 센서 핀을 입력으로 설정
-  attachInterrupt(digitalPinToInterrupt(sensorPin), countPulses, FALLING); // 마그네틱 센서에서 펄스 감지
-  pulseCount = 0;              // 펄스 수 초기화  
-  lastTime = millis();         // 마지막 측정 시간 초기화
+  Serial.begin(9600);
 
-  Serial.begin(9600);          // 시리얼 통신 시작
+  pinMode(speedSensor, INPUT);
+  pinMode(lightSensor, INPUT);
+  pinMode(ultrasonicTrigger, OUTPUT);
+  pinMode(ultrasonicEcho, INPUT);
+  pinMode(ultrasonicTrigger1, OUTPUT);
+  pinMode(ultrasonicEcho, INPUT);
+
+  for (int i = relay5; i <= relay8; i++) {
+    pinMode(i, OUTPUT);
+    digitalWrite(i, LOW);
+  }
+
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
 }
 
 void loop() {
-  unsigned long currentTime = millis();   // 현재 시간
-  float timeDiff = (currentTime - lastTime) / 1000.0;  // 현재 시간과 마지막 측정 시간의 차이 (초 단위)
-  float wheelCircumference = wheelDiameter * PI;  // 바퀴의 원주율 계산 (바퀴 지름 * PI)
-  rpm = (pulseCount / timeDiff) * 60.0;  // 회전 속도 계산 (펄스 수 / 시간 차이 * 60)
-  
-  float speedKPH = (wheelCircumference * rpm) / 100000.0;  // 속도 계산 (바퀴 원주율 * RPM을 km/h로 변환)
-  if (speedKPH > 15.00){
-    digitalWrite(relay1Pin, HIGH); // 15km 이상 달린다면 10초간 정지한다.
-    digitalWrite(relay2Pin, LOW);
-    digitalWrite(relay3Pin, HIGH);
-    digitalWrite(relay4Pin, LOW);
-    delay(10000); // 모터 회전 10초간 정지, 모터가 정지하는데 시간도 있어서 시운전할 때 시간 (수정)
-    digitalWrite(relay1Pin, LOW); // 정지 10초가 지나면 다시 모터를 반대로 돌려 정지가 풀린다.
-    digitalWrite(relay2Pin, HIGH);
-    digitalWrite(relay3Pin, LOW);
-    digitalWrite(relay4Pin, HIGH);
-  } else{
-    digitalWrite(relay1Pin, LOW); // 모터 무회전 소스
-    digitalWrite(relay2Pin, LOW);
-    digitalWrite(relay3Pin, LOW);
-    digitalWrite(relay4Pin, LOW);
-  
-    
+  controlAutoLight();
+  detectObstacleAndStop();
+  detectOverspeedAndStop();
+}
+
+// 오토 라이트 제어 함수
+void controlAutoLight() {
+  int sensorValue;
+  sensorValue = filterNoise(analogRead(lightSensor));
+  if(sensorValue > 410){
+    digitalWrite( ledPin, HIGH);
+  }else if(sensorValue < 340){
+    digitalWrite( ledPin, LOW);
+  }
+
+}
+
+// 장애물 감지 및 충돌 방지/긴급 정지 함수
+void detectObstacleAndStop() {
+  int distance2;
+  int distance3;
+  distance2 = filterNoise(analogRead(ultrasonicTrigger));
+  distance3 = filterNoise(analogRead(ultrasonicTrigger1));
+  if(measureDistance < 50){
+    applyBrakes;
+  }else if(measureDistance > 50){
+    releaseBrakes;
   }
   
-  Serial.print("Speed (km/h): ");
-  Serial.println(speedKPH);  // 속도 출력
 
-  pulseCount = 0;            // 펄스 수 초기화
-  lastTime = currentTime;    // 마지막 측정 시간 업데이트
-
-  delay(1000);               // 1초 대기
 }
 
-void countPulses() {
-  pulseCount++;  // 펄스 수 증가
-}
-
-
-
-
-
-
-
-
-장애물인식 및 충돌방지/긴급정지기능 개발
-
-int triggerPin1 = 9;
-int echoPin1 = 8;
-int buzzerPin = 7;
-int triggerPin2 = 10;
-int echoPin2 = 11;
-int triggerPin3 = 16;
-int echoPin3 = 17;
-int relay1Pin = 3; // 릴레이 1번 모터 연결 (브레이크)
-int relay2Pin = 4; // 릴레이 1번 모터 연결 (브레이크)
-int relay3Pin = 5; // 릴레이 2번 모터 연결 (브레이크)
-int relay4Pin = 6; // 릴레이 2번 모터 연결 (브레이크)
-int relay5Pin = 12; // 릴레이 3번 모터 연결 (기울기)왼쪽
-int relay6Pin = 13; // 릴레이 3번 모터 연결 (기울기)왼쪽
-int relay7Pin = 14; // 릴레이 4번 모터 연결 (기울기)오른쪽
-int relay8Pin = 15; // 릴레이 4번 모터 연결 (기울기)오른쪽
-
-
-long duration1, distance1;
-long duration2, distance2;
-long duration3, distance3;
-
-void setup(){
-  pinMode(relay1Pin, OUTPUT);
-  pinMode(relay2Pin, OUTPUT);
-  pinMode(relay3Pin, OUTPUT);
-  pinMode(relay4Pin, OUTPUT);
-  pinMode(relay5Pin, OUTPUT);
-  pinMode(relay6Pin, OUTPUT);
-  pinMode(relay7Pin, OUTPUT);
-  pinMode(relay8Pin, OUTPUT);
-  pinMode(triggerPin1, OUTPUT); //초음파가 나가는 곳
-  pinMode(echoPin1, INPUT); // 초음파가 돌아오는 곳
-  pinMode(buzzerPin, OUTPUT);//HIGH로 신호를 주면 울리고 LOW로 주면 정지
-  pinMode(triggerPin2, OUTPUT);
-  pinMode(echoPin2, INPUT);
-  pinMode(triggerPin3, OUTPUT);
-  pinMode(echoPin3, INPUT);
-  
-
-  Serial.begin(9600); //거리 감지 센서에서 들어오는 값을 확인하기 위함
-}
-
-void loop(){
-  float distance1; // 시간을 거리로 환산한 값이 들어가라는 설정
-  unsigned long duration1; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
-
-  digitalWrite(triggerPin1, HIGH); // 초음파로 보내고
-  delay(10); 
-  digitalWrite(triggerPin1, LOW); // 그만 보내는 설정
-
-  duration1 = pulseIn(echoPin1, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
-  distance1 = ((340*duration1) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
-
-  Serial.println(distance1); //시리얼 모니터 값을 확인
-  delay(300);
-  float distance2; // 시간을 거리로 환산한 값이 들어가라는 설정
-  unsigned long duration2; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
-
-  digitalWrite(triggerPin2, HIGH); // 초음파로 보내고
-  delay(10); 
-  digitalWrite(triggerPin2, LOW); // 그만 보내는 설정
-
-  duration2 = pulseIn(echoPin2, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
-  distance2 = ((340*duration2) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
-  delay(300);
-  float distance3; // 시간을 거리로 환산한 값이 들어가라는 설정
-  unsigned long duration3; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
-
-  digitalWrite(triggerPin3, HIGH); // 초음파로 보내고
-  delay(10); 
-  digitalWrite(triggerPin3, LOW); // 그만 보내는 설정
-
-  duration3 = pulseIn(echoPin3, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
-  distance3 = ((340*duration3) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
-  delay(300);
-  
-
-
-  if(distance1 <= 50){ // ex) 50cm 앞에 장애물 확인되면 모터 하나를 올려준다. (ex 왼쪽 모터
-    digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
-    digitalWrite(relay5Pin, HIGH);
-    digitalWrite(relay6Pin, LOW);
-     } else{
-    digitalWrite(buzzerPin, LOW); // 신호를 꺼준다.
-    digitalWrite(relay5Pin, LOW);
-    digitalWrite(relay6Pin, HIGH);
-    
+// 과속 감지 및 긴급 정지 함수
+void detectOverspeedAndStop() {
+  int speedKDH;
+  speedKDH = filterNoise(analogRead(speedSensor));
+  if(measureSpeed < 10){
+    applyBrakes; 
+  }else if(measureSpeed > 10){
+    releaseBrakes;
   }
-   if(distance2 <= 50){ // ex) 50cm 앞에 장애물 확인되면 모터 하나를 올려준다. (ex 오른쪽 모터
-    digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
-    digitalWrite(relay7Pin, HIGH);
-    digitalWrite(relay8Pin, LOW);
-   
-    
-  } else{
-    digitalWrite(buzzerPin, LOW); // 
-    digitalWrite(relay7Pin, LOW);
-    digitalWrite(relay8Pin, HIGH);
-   }
-   if(distance3 <= 50){ // ex) 50cm 앞에 장애물 확인되면 브레이크 모터, 왼쪽 오른쪽 모두 정지
-    digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
-    digitalWrite(relay1Pin, HIGH);
-    digitalWrite(relay2Pin, LOW);
-    digitalWrite(relay3Pin, HIGH);
-    digitalWrite(relay4Pin, LOW);
-   
-    
-  } else{
-    digitalWrite(buzzerPin, LOW); // 
-    digitalWrite(relay1Pin, LOW);
-    digitalWrite(relay2Pin, HIGH);
-    digitalWrite(relay3Pin, LOW);
-    digitalWrite(relay4Pin, HIGH);
-   }
+
 }
 
-//
+// 노이즈 필터링 함수
+int filterNoise(int rawValue) {
+  static int values[10];
+  static int index = 0;
+  static int sum = 0;
+
+  sum -= values[index];
+  values[index] = rawValue;
+  sum += values[index];
+
+  index = (index + 1) % 10;
+
+  return sum / 10;
+}
+
+// 브레이크 적용 함수
+void applyBrakes() {
+  digitalWrite(relay5, HIGH);
+  digitalWrite(relay6, LOW);
+  digitalWrite(relay7, HIGH);
+  digitalWrite(relay8, LOW);
+}
+
+// 브레이크 해제 함수
+void releaseBrakes() {
+  digitalWrite(relay5, LOW);
+  digitalWrite(relay6, HIGH);
+  digitalWrite(relay7, LOW);
+  digitalWrite(relay8, HIGH);
+}
+
+
+// 거리 측정 함수
+long measureDistance() {
+  digitalWrite(ultrasonicTrigger, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultrasonicTrigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ultrasonicTrigger, LOW);
+  digitalWrite(ultrasonicTrigger1, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultrasonicTrigger1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ultrasonicTrigger1, LOW);
+
+  long duration = pulseIn(ultrasonicEcho, HIGH);
+  long distance = (duration / 2) / 29.1;
+  long duration1 = pulseIn(ultrasonicEcho1, HIGH);
+  long distance1 = (duration1 / 2) / 29.1;
+
+  return distance;
+  return distance1;
+}
+
+// 속도 측정 함수
+void measureSpeed() {
+  unsigned long currentMillis = millis();
+
+  if (digitalRead(speedSensor) == HIGH && prevMillis == 0) {
+    prevMillis = currentMillis;
+  } else if (digitalRead(speedSensor) == LOW && prevMillis > 0) {
+    unsigned long timeElapsed = currentMillis - prevMillis;
+    float speed = (wheelCircumference / timeElapsed) * 1000;  // m/s로 변환
+    currentSpeed = speed;
+    prevMillis = 0;
+  }
+}
+// 테스트 및 디버깅을 위한 시리얼 출력 함수
+void printDebugInfo() {
+  Serial.print("조도 센서: ");
+  Serial.println(analogRead(lightSensor));
+  Serial.print("속도 센서: ");
+  Serial.println(digitalRead(speedSensor));
+  Serial.print("거리: ");
+  Serial.println(measureDistance());
+  Serial.print("속도: ");
+  Serial.println(currentSpeed);
+  delay(1000);
+}
