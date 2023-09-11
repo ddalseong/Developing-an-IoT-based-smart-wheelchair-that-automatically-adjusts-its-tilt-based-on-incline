@@ -1,315 +1,155 @@
-ㅡㅡㅡㅡㅡㅡ모터랑 적외선
-int motorpin1 = 6; //왼쪽
-int motorpin2 = 7; //왼쪽
-int motorpin3 = 0; //오른쪽 ( 입력 ~숫자 다른 핀 필요 )미설정
-int motorpin4 = 0; //오른쪽  ( 입력   숫자  다른 핀 필요  )미설정
+오토라이트 기능 (수정)
+오후 3시 270~320 정도의 빛 
 
-void setup() {
-  pinMode(2, OUTPUT); 
-  pinMode(3, INPUT); 
-  pinMode(motorpin1, OUTPUT); //왼쪽
-  pinMode(motorpin2, OUTPUT); //왼쪽
-  pinMode(motorpin3, OUTPUT); //오른쪽
-  pinMode(motorpin4, OUTPUT); //어른쪽
- 
+오후 6시 410~ 490 정도의 빛 (어두워지기 시작해서 켜져야 된다고 판단)
+
+실내에서 (형광등ON) 945~964
+실내에서 (형광등OFF) 1018~1020
+
+
+코드 
+const int PRegistor = A0;
+
+void setup(){
+  pinMode(7,OUTPUT);
+  Serial.begin(9600);
 }
 
 void loop(){
-  analogWrite(11, 0); //초록색
-  analogWrite(10, 0); //빨간색
-  analogWrite(9, 0); //파란색
-  
-  digitalWrite(2, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(2, LOW);
+  int sensorValue;
+  sensorValue = analogRead(A0);
+   Serial.print("밝기 : ");
+  Serial.println(sensorValue);
+  delay(300);
 
-  long duration = pulseIn(3, HIGH);
-
-
-  if (duration == 0) {
-    return;
+  if(sensorValue > 410){
+    digitalWrite( 7, HIGH);
+  }else if(sensorValue <340){
+    digitalWrite( 7, LOW);
   }
-  long distance = duration / 58.2;
-  if (distance<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin1, HIGH); //왼쪽 모터를 올린다.
-    digitalWrite(motorpin2, LOW); //왼쪽 모터를 올린다.
-    digitalWrite(motorpin3, HIGH); // 오른쪽 모터를 올린다.
-    digitalWrite(motorpin4, LOW); //오른쪽 모터를 올린다..
-  } else if (distance<60){ 
-    analogWrite(10, 255);
-  } else if (distance < 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin1, LOW); //왼쪽  모터를 내린다.
-    digitalWrite(motorpin2, HIGH);//왼쪽  모터를 내린다.
-    digitalWrite(motorpin3, LOW); //오른쪽 모터를 내린다.
-    digitalWrite(motorpin4, HIGH); //오른쪽 모터를 내린다.
-  }
-  delay(100);
 }
 
+참고 https://www.youtube.com/watch?v=T3LzJBsYCSE&t=1s
 
-------LED랑 조도 그리고 적외선센서
+릴레이 활용 DC모터 제어 코드 
+
+과속감지 긴급정지 기능 
+바퀴의 크기에 따라 RPM을 측정하는 코드 
+현재 설정은 바퀴둘레 15cm가 회전을 하며 15km로 넘어가면 모터를 작동하여 10초간 정지하는 설정을 주었다) 앞에 주석 처리한 모터 B_B1이 자주 에러가 난다. 확인이 필요) 그 밖에 다른 부분은 문제없이 돌아간다.
+
+const int sensorPin = 2;    // 마그네틱 센서 입력 핀
+float wheelCircumference = 15; // 바퀴의 둘레 길이
+unsigned long lastTime;     // 마지막 RPM 측정 시간
+volatile int pulseCount;    // 마그네틱 센서에서 인식된 펄스 수
+float rpm;                  // 회전 속도 (RPM)
+int motorA_A1 = 10;
+int motorA_B1 = 11;
+int motorB_A1 = 12;
+int motorB_B2 = 13;
+
 void setup() {
-  pinMode(2, OUTPUT);
-  pinMode(3, INPUT);
-  
-  
+  pinMode(motorA_A1, OUTPUT);
+  pinMode(motorA_B1, OUTPUT);
+  pinMode(motorB_A1, OUTPUT);
+ // pinMode(motorB_B1, OUTPUT);
+  Serial.begin(9600);             // 시리얼 통신 시작
+  pinMode(sensorPin, INPUT_PULLUP);// 마그네틱 센서 핀을 입력으로 설정
+  attachInterrupt(digitalPinToInterrupt(sensorPin), countPulses, FALLING); // 마그네틱 센서에서 펄스 감지
+  pulseCount = 0;                 // 펄스 수 초기화
+  lastTime = millis();            // 마지막 측정 시간 초기화
 }
-void loop(){
-  int light = analogRead(A0);
-  int ledLight = map(light, 0, 1023, 255, 0);
-  analogWrite(6, ledLight);
-  
-  analogWrite(11, 0);
-  analogWrite(10, 0);
-  analogWrite(9, 0);
-  digitalWrite(2, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(2, LOW);
-  long duration = pulseIn(3, HIGH);
-  if (duration == 0) {
+
+void loop() {
+  unsigned long currentTime = millis();  // 현재 시간
+  float timeDiff = (currentTime - lastTime) / 1000.0; // 현재 시간과 마지막 측정 시간의 차이
+  rpm = (pulseCount / wheelCircumference) / timeDiff * 60.0; // 회전바퀴의 둘레 길이에 따라 속도 계산
+  Serial.print("RPM: ");           
+  Serial.println(rpm);            // 회전 속도 출력
+  if (rpm > 15.00){
+    analogWrite(motorA_A1,200);
+    analogWrite(motorA_B1,0);
+    analogWrite(motorB_A1,200);
+  //  analogWrite(moterB_B1,0);
+    delay(10000); // 10초간 정지
+  } else{
+    analogWrite(motorA_A1, 0);
+    analogWrite(motorA_B1, 200);
+    analogWrite(motorB_A1, 0);
+  //  analogWrite(motorB_B1, 200);
     
   }
-  long distance = duration / 58.2;
-  if (distance<30){
-    analogWrite(11, 255);
-  } else if (distance<60){
-    analogWrite(10, 255);
-  } else if (distance < 100){
-    analogWrite(9, 255);
-  }
-  delay(100);
+  pulseCount = 0;                // 펄스 수 초기화
+  lastTime = currentTime;        // 마지막 측정 시간 업데이트
+  delay(1000);                   // 1초 대기
+  
 }
----------------- 모터 2개 적외선 2개 3색 LED 0
-int motorpin1 = 6; //왼쪽
-int motorpin2 = 7; //왼쪽
-int motorpin3 = 0; //오른쪽 ( 입력 ~숫자 다른 핀 필요 )미설정
-int motorpin4 = 0; //오른쪽  ( 입력   숫자  다른 핀 필요  )미설정
 
-long duration1, distance1;
-long duration2, distance2;
+void countPulses() {
+  pulseCount++;  // 펄스 수 증가
+}
 
-void setup() {
-  pinMode(2, OUTPUT); 
-  pinMode(3, INPUT); 
-  pinMode(4, OUTPUT);
-  pinMode(5, INPUT);
-  pinMode(motorpin1, OUTPUT); //왼쪽
-  pinMode(motorpin2, OUTPUT); //왼쪽
-  pinMode(motorpin3, OUTPUT); //오른쪽
-  pinMode(motorpin4, OUTPUT); //어른쪽
- 
+장애물감지 및 충돌방지/긴급정지 기능 개발 (테스트까지 완료)
+
+필요 모터1개, 모터 드라이버 1개 초음파센서, 부저, 12V배터리
+
+초음파센서 
+GND - GND
+VCC - 5V
+Echo - 8 PIN
+Trigger - 9 PIN
+모터  10, 11 PIN ( 8~13 INPUT, 7~2 OUTPUT)
+
+부저 
+마이너스 부분을 GND로 연결
+플러스 부분을 7 PIN으로 연결 
+    
+  
+int triggerPin = 9;
+int echoPin = 8;
+int buzzerPin = 7;
+int motorA_A1 = 10;
+int motorA_B1 = 11;
+int motorB_A1 = 12;
+int motorB_B1 = 13;
+
+void setup(){
+  pinMode(motorA_A1, OUTPUT); //모터 모두 출력으로 설정
+  pinMode(motorA_B1, OUTPUT);
+  pinMode(motorB_A1, OUTPUT);
+  pinMode(motorB_B1, OUTPUT);
+  pinMode(triggerPin, OUTPUT); //초음파가 나가는 곳
+  pinMode(echoPin, INPUT); // 초음파가 돌아오는 곳
+  pinMode(buzzerPin, OUTPUT);//HIGH로 신호를 주면 울리고 LOW로 주면 정지
+
+  Serial.begin(9600); //거리 감지 센서에서 들어오는 값을 확인하기 위함
 }
 
 void loop(){
-  analogWrite(11, 0); //초록색 왼쪽
-  analogWrite(10, 0); //빨간색 왼쪽
-  analogWrite(9, 0); //파란색 왼쪽
-  
-  digitalWrite(2, HIGH); //왼쪽
-  delayMicroseconds(10); //왼쪽
-  digitalWrite(2, LOW);  //왼쪽
-  digitalWrite(4, HIGH);
-  delayMicroseconds(10); //숫자 대기
-  digitalWrite(4, LOW);
-  long duration1 = pulseIn(3, HIGH);
-  long duration2 = pulseIn(5, HIGH);
+  float distance; // 시간을 거리로 환산한 값이 들어가라는 설정
+  unsigned long duration; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
 
+  digitalWrite(triggerPin, HIGH); // 초음파로 보내고
+  delay(10); 
+  digitalWrite(triggerPin, LOW); // 그만 보내는 설정
 
-  if (duration1 == 0) {
-    return;
+  duration = pulseIn(echoPin, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
+  distance = ((340*duration) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
+
+  Serial.println(distance); //시리얼 모니터 값을 확인
+  delay(300);
+
+  if(distance <= 50){ // ex) 50cm거리 앞에 누군가 있으면 소리와 함께 긴급정지
+    digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
+    analogWrite(motorA_A1, 200); //A모터, A1 단자 전압 0
+    analogWrite(motorA_B1, 0); // A모터, B1 단자 전압 x
+    analogWrite(motorB_A1, 200);
+    analogWrite(motorB_B1, 0);
+    
+  } else{
+    digitalWrite(buzzerPin, LOW); // 신호를 꺼준다.
+    analogWrite(motorA_A1, 0); //A모터, A1 단자 전압 x
+    analogWrite(motorA_B1, 200); // A모터, B1 단자 전압 0
+    analogWrite(motorB_A1, 0);
+    analogWrite(motorB_B1, 200);
   }
-  long distance1 = duration1 / 58.2;
-  if (distance1<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin1, HIGH); //왼쪽 모터를 올린다.
-    digitalWrite(motorpin2, LOW); //왼쪽 모터를 올린다.
-  } else if (distance1<60){ 
-    analogWrite(10, 255);
-  } else if (distance1< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin1, LOW); //왼쪽  모터를 내린다.
-    digitalWrite(motorpin2, HIGH);//왼쪽  모터를 내린다.
-  }
-   if (duration2 == 0) {
-    return;
-  }
-  long distance2 = duration2 / 58.2;
-   if (distance1<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin3, HIGH); // 오른쪽 모터를 올린다.
-    digitalWrite(motorpin4, LOW); //오른쪽 모터를 올린다..
-  } else if (distance1<60){ 
-    analogWrite(10, 255);
-  } else if (distance1< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin3, LOW); //오른쪽 모터를 내린다.
-    digitalWrite(motorpin4, HIGH); //오른쪽 모터를 내린다.
-  }
-  delay(100);
 }
----------------------- 적외선 2개 ledLight 1개 조도센서1 3색 모터2 0
-int motorpin1 = 6; //왼쪽
-int motorpin2 = 7; //왼쪽
-int motorpin3 = 0; //오른쪽 ( 입력 ~숫자 다른 핀 필요 )미설정
-int motorpin4 = 0; //오른쪽  ( 입력   숫자  다른 핀 필요  )미설정
-
-long duration1, distance1;
-long duration2, distance2;
-
-void setup() {
-  pinMode(2, OUTPUT); 
-  pinMode(3, INPUT); 
-  pinMode(4, OUTPUT);
-  pinMode(5, INPUT);
-  pinMode(motorpin1, OUTPUT); //왼쪽
-  pinMode(motorpin2, OUTPUT); //왼쪽
-  pinMode(motorpin3, OUTPUT); //오른쪽
-  pinMode(motorpin4, OUTPUT); //어른쪽
- 
-}
-
-void loop(){
-  int light = analogRead(A0);
-  int ledLight = map(light,0, 1023, 255, 0);
-  analogWrite(12, ledLight);
-  analogWrite(11, 0); //초록색 왼쪽
-  analogWrite(10, 0); //빨간색 왼쪽
-  analogWrite(9, 0); //파란색 왼쪽
-  
-  digitalWrite(2, HIGH); //왼쪽
-  delayMicroseconds(10); //왼쪽
-  digitalWrite(2, LOW);  //왼쪽
-  digitalWrite(4, HIGH);
-  delayMicroseconds(10); //숫자 대기
-  digitalWrite(4, LOW);
-  long duration1 = pulseIn(3, HIGH);
-  long duration2 = pulseIn(5, HIGH);
-
-
-  if (duration1 == 0) {
-    return;
-  }
-  long distance1 = duration1 / 58.2;
-  if (distance1<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin1, HIGH); //왼쪽 모터를 올린다.
-    digitalWrite(motorpin2, LOW); //왼쪽 모터를 올린다.
-  } else if (distance1<60){ 
-    analogWrite(10, 255);
-  } else if (distance1< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin1, LOW); //왼쪽  모터를 내린다.
-    digitalWrite(motorpin2, HIGH);//왼쪽  모터를 내린다.
-  }
-   if (duration2 == 0) {
-    return;
-  }
-  long distance2 = duration2 / 58.2;
-   if (distance2<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin3, HIGH); // 오른쪽 모터를 올린다.
-    digitalWrite(motorpin4, LOW); //오른쪽 모터를 올린다..
-  } else if (distance2<60){ 
-    analogWrite(10, 255);
-  } else if (distance2< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin3, LOW); //오른쪽 모터를 내린다.
-    digitalWrite(motorpin4, HIGH); //오른쪽 모터를 내린다.
-  }
-  delay(100);
-}
--------------------------속도 빼고 다했는데 오류 
-int motorpin1 = 0; //왼쪽
-int motorpin2 = 0; //왼쪽
-int motorpin3 = 0; //오른쪽 ( 입력 ~숫자 다른 핀 필요 )미설정
-int motorpin4 = 0; //오른쪽  ( 입력   숫자  다른 핀 필요  )미설정
-
-long duration1, distance1; //왼쪽
-long duration2, distance2; //오른쪽
-long duration3, distance3; //소리
-
-void setup() {
-  pinMode(2, OUTPUT); 
-  pinMode(3, INPUT); 
-  pinMode(4, OUTPUT);
-  pinMode(5, INPUT);
-  pinMode(6, OUTPUT); //소리
-  pinMode(7, INPUT);  //소리
-  pinMode(motorpin1, OUTPUT); //왼쪽
-  pinMode(motorpin2, OUTPUT); //왼쪽
-  pinMode(motorpin3, OUTPUT); //오른쪽
-  pinMode(motorpin4, OUTPUT); //어른쪽
- 
-}
-
-void loop(){
-  int light = analogRead(A0);
-  int ledLight = map(light,0, 1023, 255, 0);
-  analogWrite(12, ledLight);
-  analogWrite(11, 0); //초록색 왼쪽
-  analogWrite(10, 0); //빨간색 왼쪽
-  analogWrite(9, 0); //파란색 왼쪽
-  
-  digitalWrite(2, HIGH); //왼쪽
-  delayMicroseconds(10); //왼쪽
-  digitalWrite(2, LOW);  //왼쪽
-  digitalWrite(4, HIGH);
-  delayMicroseconds(10); //왼쪽
-  digitalWrite(4, LOW);
-  digitalWrite(6, HIGH); //소리
-  delayMicroseconds(10);
-  digitalWrite(6,LOW);
-  
-  long duration1 = pulseIn(3, HIGH);
-  long duration2 = pulseIn(5, HIGH);
-  long duration3 = pulseIn(7, HIGH);
-  
-
-
-
-  if (duration1 == 0) {
-    return;
-  }
-  long distance1 = duration1 / 58.2;
-  if (distance1<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin1, HIGH); //왼쪽 모터를 올린다.
-    digitalWrite(motorpin2, LOW); //왼쪽 모터를 올린다.
-  } else if (distance1<60){ 
-    analogWrite(10, 255);
-  } else if (distance1< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin1, LOW); //왼쪽  모터를 내린다.
-    digitalWrite(motorpin2, HIGH);//왼쪽  모터를 내린다.
-  }
-   if (duration2 == 0) {
-    return;
-  }
-  long distance2 = duration2 / 58.2;
-   if (distance2<30){
-    analogWrite(11, 255);
-    digitalWrite(motorpin3, HIGH); // 오른쪽 모터를 올린다.
-    digitalWrite(motorpin4, LOW); //오른쪽 모터를 올린다..
-  } else if (distance2<60){ 
-    analogWrite(10, 255);
-  } else if (distance2< 100){
-    analogWrite(9, 255);
-    digitalWrite(motorpin3, LOW); //오른쪽 모터를 내린다.
-    digitalWrite(motorpin4, HIGH); //오른쪽 모터를 내린다.
-  }
-     if (duration3 == 0){
-    return;
-  }
-  long distance3 = duration3 / 58.2;
-  if (distance3>=60){
-    tone(8,1000,20);
-    delay(20);
-    noTone(8);
-   
-  } 
-  delay(100);
-}
-
-
