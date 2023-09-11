@@ -1,4 +1,13 @@
-오토라이트 기능
+오토라이트 기능 (수정)
+오후 3시 270~320 정도의 빛 
+
+오후 6시 410~ 490 정도의 빛 (어두워지기 시작해서 켜져야 된다고 판단)
+
+실내에서 (형광등ON) 945~964
+실내에서 (형광등OFF) 1018~1020
+
+
+코드 
 const int PRegistor = A0;
 
 void setup(){
@@ -19,104 +28,157 @@ void loop(){
     digitalWrite( 7, LOW);
   }
 }
-과속감지 긴급정지 기능
-const int sensorPin = 2;    // 마그네틱 센서 입력 핀
-float wheelCircumference = 15; // 바퀴의 둘레 길이
-unsigned long lastTime;     // 마지막 RPM 측정 시간
-volatile int pulseCount;    // 마그네틱 센서에서 인식된 펄스 수
-float rpm;                  // 회전 속도 (RPM)
-int motorA_A1 = 10;
-int motorA_B1 = 11;
-int motorB_A1 = 12;
-int motorB_B2 = 13;
+
+참고 https://www.youtube.com/watch?v=T3LzJBsYCSE&t=1s
+
+릴레이 활용 DC모터 제어 코드 
+
+
+과속감지 긴급정지 기능 개발
+
+(원주율에 따른 rpm 변화를 km로  표시하는 방법)
+/////// 바퀴의 지름에 따라 속도 측정값이 달라짐 현재 12cm로 설정하였다. (공식 예시)
+rpm을 km로 계산하는 방법 ex 12cm라면 모터 둘레 = 2πr = 2π×(12inch × 2.54cm/inch ) = 191.5cm
+1분 동안 1400회전을 하므로 달린 거리 = 1400 × 191.5cm = 268,116.1cm = 2,681.2m = 2.68km 입니다.
+
+과속 감지 긴급정지 기능 (결과)(코드확인 완료 이상무)
+
+바퀴 지름을 26으로 설정하였다. 
+
+const int sensorPin = 2;       // 마그네틱 센서 입력 핀
+const float wheelDiameter = 26.0;  // 바퀴의 지름 (단위: 센티미터)
+unsigned long lastTime;      // 마지막 RPM 측정 시간
+volatile int pulseCount;     // 마그네틱 센서에서 인식된 펄스 수
+float rpm;                   // 회전 속도 (RPM)
 
 void setup() {
-  pinMode(motorA_A1, OUTPUT);
-  pinMode(motorA_B1, OUTPUT);
-  pinMode(motorB_A1, OUTPUT);
- // pinMode(motorB_B1, OUTPUT);
-  Serial.begin(9600);             // 시리얼 통신 시작
-  pinMode(sensorPin, INPUT_PULLUP);// 마그네틱 센서 핀을 입력으로 설정
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
+  digitalWrite(3, LOW);
+  digitalWrite(4, LOW);
+  pinMode(sensorPin, INPUT_PULLUP);  // 마그네틱 센서 핀을 입력으로 설정
   attachInterrupt(digitalPinToInterrupt(sensorPin), countPulses, FALLING); // 마그네틱 센서에서 펄스 감지
-  pulseCount = 0;                 // 펄스 수 초기화
-  lastTime = millis();            // 마지막 측정 시간 초기화
+  pulseCount = 0;              // 펄스 수 초기화
+  lastTime = millis();         // 마지막 측정 시간 초기화
+
+  Serial.begin(9600);          // 시리얼 통신 시작
 }
 
 void loop() {
-  unsigned long currentTime = millis();  // 현재 시간
-  float timeDiff = (currentTime - lastTime) / 1000.0; // 현재 시간과 마지막 측정 시간의 차이
-  rpm = (pulseCount / wheelCircumference) / timeDiff * 60.0; // 회전바퀴의 둘레 길이에 따라 속도 계산
-  Serial.print("RPM: ");           
-  Serial.println(rpm);            // 회전 속도 출력
-  if (rpm > 15.00){
-    analogWrite(motorA_A1,200);
-    analogWrite(motorA_B1,0);
-    analogWrite(motorB_A1,200);
-  //  analogWrite(moterB_B1,0);
+  unsigned long currentTime = millis();   // 현재 시간
+  float timeDiff = (currentTime - lastTime) / 1000.0;  // 현재 시간과 마지막 측정 시간의 차이 (초 단위)
+  float wheelCircumference = wheelDiameter * PI;  // 바퀴의 원주율 계산 (바퀴 지름 * PI)
+  rpm = (pulseCount / timeDiff) * 60.0;  // 회전 속도 계산 (펄스 수 / 시간 차이 * 60)
+  
+  float speedKPH = (wheelCircumference * rpm) / 100000.0;  // 속도 계산 (바퀴 원주율 * RPM을 km/h로 변환)
+  if (speedKPH > 15.00){
+    digitalWrite(3, HIGH);
+    digitalWrite(4, HIGH);
     delay(10000); // 10초간 정지
   } else{
-    analogWrite(motorA_A1, 0);
-    analogWrite(motorA_B1, 200);
-    analogWrite(motorB_A1, 0);
-  //  analogWrite(motorB_B1, 200);
+    digitalWrite(3, LOW);
+    digitalWrite(4, LOW);
     
   }
-  pulseCount = 0;                // 펄스 수 초기화
-  lastTime = currentTime;        // 마지막 측정 시간 업데이트
-  delay(1000);                   // 1초 대기
   
+  Serial.print("Speed (km/h): ");
+  Serial.println(speedKPH);  // 속도 출력
+
+  pulseCount = 0;            // 펄스 수 초기화
+  lastTime = currentTime;    // 마지막 측정 시간 업데이트
+
+  delay(1000);               // 1초 대기
 }
 
 void countPulses() {
   pulseCount++;  // 펄스 수 증가
 }
-장애물 감지 및 충돌방지/긴급정지 기능
-int triggerPin = 9;
-int echoPin = 8;
+
+
+
+
+
+장애물감지 및 충돌방지/긴급정지 기능 개발 
+(릴레이모터 수정 초음파 센서 하나 추가) 
+(코드 확인 완료 이상무) 
+
+
+int triggerPin1 = 9;
+int echoPin1 = 8;
 int buzzerPin = 7;
-int motorA_A1 = 10;
-int motorA_B1 = 11;
-int motorB_A1 = 12;
-int motorB_B1 = 13;
+int triggerPin2 = 10;
+int echoPin2 =11;
+
+long duration1, distance1;
+long duration2, distance2;
 
 void setup(){
-  pinMode(motorA_A1, OUTPUT); //모터 모두 출력으로 설정
-  pinMode(motorA_B1, OUTPUT);
-  pinMode(motorB_A1, OUTPUT);
-  pinMode(motorB_B1, OUTPUT);
-  pinMode(triggerPin, OUTPUT); //초음파가 나가는 곳
-  pinMode(echoPin, INPUT); // 초음파가 돌아오는 곳
+  pinMode(3, OUTPUT); // 실행 OUTPUT 3,4 브레이크 모터 5,6 기울기 조정 모터
+  pinMode(4, OUTPUT);
+  pinMode(5, OUTPUT);
+  pinMode(6, OUTPUT);
+  digitalWrite(3, LOW);
+  digitalWrite(4, LOW);
+  digitalWrite(5, LOW);
+  digitalWrite(6, LOW);
+  pinMode(triggerPin1, OUTPUT); //초음파가 나가는 곳
+  pinMode(echoPin1, INPUT); // 초음파가 돌아오는 곳
   pinMode(buzzerPin, OUTPUT);//HIGH로 신호를 주면 울리고 LOW로 주면 정지
+  pinMode(triggerPin2, OUTPUT);
+  pinMode(echoPin2, INPUT);
+  
 
   Serial.begin(9600); //거리 감지 센서에서 들어오는 값을 확인하기 위함
 }
 
 void loop(){
-  float distance; // 시간을 거리로 환산한 값이 들어가라는 설정
-  unsigned long duration; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
+  float distance1; // 시간을 거리로 환산한 값이 들어가라는 설정
+  unsigned long duration1; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
 
-  digitalWrite(triggerPin, HIGH); // 초음파로 보내고
+  digitalWrite(triggerPin1, HIGH); // 초음파로 보내고
   delay(10); 
-  digitalWrite(triggerPin, LOW); // 그만 보내는 설정
+  digitalWrite(triggerPin1, LOW); // 그만 보내는 설정
 
-  duration = pulseIn(echoPin, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
-  distance = ((340*duration) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
+  duration1 = pulseIn(echoPin1, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
+  distance1 = ((340*duration1) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
 
-  Serial.println(distance); //시리얼 모니터 값을 확인
+  Serial.println(distance1); //시리얼 모니터 값을 확인
   delay(300);
+  float distance2; // 시간을 거리로 환산한 값이 들어가라는 설정
+  unsigned long duration2; // pulseln이라는 걸 이용해서 초음파가 돌아오는 시간을 넣을 떄 사용
 
-  if(distance <= 50){ // ex) 50cm거리 앞에 누군가 있으면 소리와 함께 긴급정지
+  digitalWrite(triggerPin2, HIGH); // 초음파로 보내고
+  delay(10); 
+  digitalWrite(triggerPin2, LOW); // 그만 보내는 설정
+
+  duration2 = pulseIn(echoPin2, HIGH); // 초음파가 물체에 팅겨서 돌아오는 시간을 Echo핀이 받고 신호가 HIGH에서 LOW로 바뀌게 되면 Pulseln으로 받는 설정
+  distance2 = ((340*duration2) / 10000) / 2; //속력은 시간분에 거리에다 10000을 나누면 cm로 바뀌고 나누기 2를 하면서 음파가 가고 오는 시간이 있기 때문에 나눠준다.
+
+
+  if(distance1 <= 50){ // ex) 50cm거리 앞에 누군가 있으면 소리와 함께 긴급정지
     digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
-    analogWrite(motorA_A1, 200); //A모터, A1 단자 전압 0
-    analogWrite(motorA_B1, 0); // A모터, B1 단자 전압 x
-    analogWrite(motorB_A1, 200);
-    analogWrite(motorB_B1, 0);
+    digitalWrite(3, HIGH);
+    digitalWrite(4, HIGH);
+    delay(10000); // 10초 정지
+   
     
   } else{
     digitalWrite(buzzerPin, LOW); // 신호를 꺼준다.
-    analogWrite(motorA_A1, 0); //A모터, A1 단자 전압 x
-    analogWrite(motorA_B1, 200); // A모터, B1 단자 전압 0
-    analogWrite(motorB_A1, 0);
-    analogWrite(motorB_B1, 200);
+    digitalWrite(3, LOW);
+    digitalWrite(4, LOW);
   }
+   if(distance2 <= 50){ // ex) 50cm거리 앞에 누군가 있으면 소리와 함께 기울기 모터가 올라간다.
+    digitalWrite(buzzerPin, HIGH); // 신호를 보내주고
+    digitalWrite(5, HIGH);
+    digitalWrite(6, HIGH);
+    delay(10000); // 10초 기울기 모터가 올라간다.
+   
+    
+  } else{
+    digitalWrite(buzzerPin, LOW); // 신호를 꺼준다.
+    digitalWrite(5, LOW);
+    digitalWrite(6, LOW);
+   }
 }
+
+  
