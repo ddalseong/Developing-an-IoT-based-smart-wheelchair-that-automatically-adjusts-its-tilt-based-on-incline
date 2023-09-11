@@ -1,105 +1,79 @@
-#define FSRCount 4 //센서 수
-#define BELTPIN 12 //벨트 핀 번호
-int FSRsensors[FSRCount] = {A0,A1,A2,A3};
-int values[FSRCount] = {0,0,0,0};
-bool sit[FSRCount] = {false,false,false,false}; // 없어도 될 수도..
-bool state = false;
-
-//bool checkBelt();
-
+#include <Wire.h>
+String message;
+bool felldown = true;
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-  pinMode(BELTPIN,INPUT);
-  while(state == isSit());
-  Serial.print("Sit in setup");
+  makeMessage();
+  Wire.begin();
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  state = isSit();
-  Serial.print("is Sit? ::::: ");
-  Serial.println(state);
-  if(digitalRead(BELTPIN) == HIGH){
-    Serial.println("button on");
-  }
-}
 
-//4개의 압력 센서 값 읽기
-void getFSR(){
-  int i=0;
-  for(i= 0;i<FSRCount;i++){
-  	values[i] = analogRead(FSRsensors[i]);
-  	Serial.print("FSR");
-    Serial.print(i);
-    Serial.print(" : ");
-  	Serial.println(values[i]);
-  }
-  delay(1000);
-  return;
 }
 
 
-//앉았는지 확인.. 4개의 값 모두 400 초과이면 true
-bool isSit(){
-  int i;
-  if(checkBelt() == false){
-    return false;
-  }
-  getFSR();
-  for(i=0;i<FSRCount;i++){
-    if(values[i] > 400){
-      sit[i] = true;
-    }
-    else{
-      sit[i] = false;
-    }
-  }
-  for(i=0;i<FSRCount;i++){
-    if(sit[i]==false){
-      return false;
-    }
-  }
-  return true;
-}
-
-//안전벨트 확인
-bool checkBelt(){
-  if(digitalRead(BELTPIN)==HIGH){
-    Serial.print("Button on");
-    return true;
+void makeMessage(){
+  //float LatF = 127.125125;
+  //float LongF = 37.252545;
+  float gpsLocation[2] = {0,0};
+  String sum;
+  char sLatF[15];
+  char sLongF[15];
+  dtostrf(gpsLocation[0],11,6,sLatF);
+  dtostrf(gpsLocation[1],11,6,sLongF);
+  if(felldown){
+    sum = "T,";
   }
   else{
-    return false;
+    sum = "F,";
   }
+  sum += sLatF;
+  sum += ",";
+  sum += sLongF;
+  //sum += ",";
+  message = sum.length();
+  message += ",";
+  message += sum;
+  Serial.println(message);
+  sendMessage();
 }
-gps 센서 감지 및 위도 경도 추출 함수 코드
-방법 1 (라이브러리 이용)
-#include <SoftwareSerial.h>
-SoftwareSerial gps(11,12);
 
-gps.begin(9600);
-
-while (ss.available() > 0){
-  gps.encode(ss.read());
-  if (gps.location.isUpdated()){
-    Serial.print("Latitude= "); 
-    Serial.print(gps.location.lat(), 6);
-    Serial.print(" Longitude= "); 
-    Serial.println(gps.location.lng(), 6)
-  }
+void sendMessage(){
+  Wire.beginTransmission(1);
+  Wire.write(message.c_str());
+  Wire.endTransmission(1);
 }
-방법 2 (계산식을 이용한 1차 적인 방법)
+
+
 #include <SoftwareSerial.h>
-// tx 10 rx 11
-SoftwareSerial gpsSerial(10,11);
+// tx 4 rx 3
+SoftwareSerial gpsSerial(4,3);
 
 char c ="";
 String str ="";
 String targetStr = "GPGGA";
+float gpsLocation[2] - {0,0}; // 0 : Lat 1 : Long
 
-gpsSerial.begin(9600);
-  if(gpsSerial.available()){
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  Serial.println("Start GPS...");
+  gpsSerial.begin(9600);
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  //Serial.println("inloop");
+  dogps();
+  //Serial.println("inloopafter");
+}
+
+void doGps(){
+    if(gpsSerial.available()){
     c=gpsSerial.read(); // 센서값 읽기
     if(c=='\n'){
       if(targetStr.equals(str.substring(1,6))){
@@ -122,10 +96,23 @@ gpsSerial.begin(9600);
 
         double LatF = Lat1.toDouble() + Lat2.toDouble()/60;
         double LongF = Long1.toFloat() + Long2.toFloat()/60;
+
+        Serial.print("lat : ");
+        Serial.println(LatF);
+        Serial.print("LongF : ");
+        Serial.println(LongF);
+
+        if(LatF != 0 &&LongF != 0){
+          gpsLocation[0] = LatF;
+          gpsLocation[1] = LongF;
+        }
       }
       str = ""; //초기화
     }
     else{
       str +=c;
     }
+  }
 }
+/////////////////////////////////////////////
+loop마다  GPS 값을 가져오지를 못해서 가져오지 못했을 때는 GPS값을 저장하지 않았습니다. 
