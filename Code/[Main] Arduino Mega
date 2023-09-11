@@ -1,12 +1,24 @@
 #include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
 // 센서 및 릴레이 핀 정의
+const int pressureSensor = A0;
+const int safetyBeltSwitch = 2;
+const int tiltSensor = 3;
+const int accelSensor = A1;
 const int lightSensor = A2;
 const int speedSensor = 4;
 const int ultrasonicTrigger = 5;
 const int ultrasonicEcho = 6;
 const int ledPin = 15;
 
+const int relay1 = 7;
+const int relay2 = 8;
+const int relay3 = 9;
+const int relay4 = 10;
 const int relay5 = 11;
 const int relay6 = 12;
 const int relay7 = 13;
@@ -23,13 +35,23 @@ float currentSpeed = 0;
 
 void setup() {
   Serial.begin(9600);
+  Wire.begin();
+  if (!accel.begin()) {
+    Serial.println("가속도 센서 인식 실패");
+    while (1)
+      ;
+  }
 
+  pinMode(pressureSensor, INPUT);
+  pinMode(safetyBeltSwitch, INPUT);
+  pinMode(tiltSensor, INPUT);
   pinMode(speedSensor, INPUT);
+  pinMode(accelSensor, INPUT);
   pinMode(lightSensor, INPUT);
   pinMode(ultrasonicTrigger, OUTPUT);
   pinMode(ultrasonicEcho, INPUT);
 
-  for (int i = relay5; i <= relay8; i++) {
+  for (int i = relay1; i <= relay8; i++) {
     pinMode(i, OUTPUT);
     digitalWrite(i, LOW);
   }
@@ -39,24 +61,93 @@ void setup() {
 }
 
 void loop() {
+  checkSafety();
+
+  adjustWheelchairAngle();
+  detectFallAndSendAlert();
   controlAutoLight();
   detectObstacleAndStop();
   detectOverspeedAndStop();
 }
 
+// 압력 센서 및 안전벨트 스위치 확인 함수
+void checkSafety() {
+  if (digitalRead(pressureSensor) == LOW || digitalRead(safetyBeltSwitch) == LOW) {
+    applyBrakes();
+  } else {
+    releaseBrakes();
+  }
+}
+
+// 경사로 기울기 조절 함수
+void adjustWheelchairAngle() {
+  bool isUphill = digitalRead(tiltSensor);
+  int rawAccelValue = analogRead(accelSensor);
+  int filteredAccelValue = filterNoise(rawAccelValue);
+  int angle = calculateAngle(filteredAccelValue);
+
+  if (angle > thresholdAngle) {
+    if (isUphill) {
+      retractFrontWheels();
+    } else {
+      extendFrontWheels();
+    }
+  }
+}
+
+// 가속도 센서 값에서 기울기 각도 계산 함수
+int calculateAngle(int filteredAccelValue) {
+  sensors_event_t event;
+  accel.getEvent(&event);
+  float x_accel = event.acceleration.x;
+
+  float angle = atan2(x_accel, sqrt(pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2))) * 180.0 / PI;
+  return angle;
+}
+
+// 넘어짐 감지 및 자동 신고 함수
+void detectFallAndSendAlert() {
+  bool isTilted = digitalRead(tiltSensor);
+  int rawAccelValue = analogRead(accelSensor);
+  int filteredAccelValue = filterNoise(rawAccelValue);
+  int angle = calculateAngle(filteredAccelValue);
+
+  if (isTilted && angle > 90) {
+    sendEmergencyAlert();
+  }
+}
+
 // 오토 라이트 제어 함수
 void controlAutoLight() {
-
+  int rawLightValue = analogRead(lightSensor);
+  int filteredLightValue = filterNoise(rawLightValue);
+  if (filteredLightValue < 100) {
+    digitalWrite(ledPin, HIGH);
+  } else {
+    digitalWrite(ledPin, LOW);
+  }
 }
 
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
 void detectObstacleAndStop() {
+  long distance = measureDistance();
 
+  if (distance < 50) {
+    applyBrakes();
+  } else {
+    releaseBrakes();
+  }
 }
 
 // 과속 감지 및 긴급 정지 함수
 void detectOverspeedAndStop() {
+  measureSpeed();
 
+  if (currentSpeed > thresholdSpeed) {
+    applyBrakes();
+  } else {
+    releaseBrakes();
+  }
 }
 
 // 노이즈 필터링 함수
@@ -72,6 +163,22 @@ int filterNoise(int rawValue) {
   index = (index + 1) % 10;
 
   return sum / 10;
+}
+
+// 앞바퀴 길이 확장 함수
+void extendFrontWheels() {
+  digitalWrite(relay1, HIGH);
+  digitalWrite(relay2, LOW);
+  digitalWrite(relay3, HIGH);
+  digitalWrite(relay4, LOW);
+}
+
+// 앞바퀴 길이 축소 함수
+void retractFrontWheels() {
+  digitalWrite(relay1, LOW);
+  digitalWrite(relay2, HIGH);
+  digitalWrite(relay3, LOW);
+  digitalWrite(relay4, HIGH);
 }
 
 // 브레이크 적용 함수
@@ -117,8 +224,23 @@ void measureSpeed() {
     prevMillis = 0;
   }
 }
+
+// 비상 경보 전송 함수
+void sendEmergencyAlert() {
+  //클라우드 전송
+  Serial.println("비상 경보: 휠체어 넘어짐 감지됨!");
+}
+
 // 테스트 및 디버깅을 위한 시리얼 출력 함수
 void printDebugInfo() {
+  Serial.print("압력 센서: ");
+  Serial.println(digitalRead(pressureSensor));
+  Serial.print("안전벨트 스위치: ");
+  Serial.println(digitalRead(safetyBeltSwitch));
+  Serial.print("기울기 센서: ");
+  Serial.println(digitalRead(tiltSensor));
+  Serial.print("가속도 센서: ");
+  Serial.println(analogRead(accelSensor));
   Serial.print("조도 센서: ");
   Serial.println(analogRead(lightSensor));
   Serial.print("속도 센서: ");
