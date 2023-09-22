@@ -171,32 +171,32 @@ int filterNoise(int rawValue) {
 void extendFrontWheels() {
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, LOW);
-  digitalWrite(relay3, HIGH);
-  digitalWrite(relay4, LOW);
+  digitalWrite(relay3, LOW);
+  digitalWrite(relay4, HIGH);
 }
 
 // 앞바퀴 길이 축소 함수
 void retractFrontWheels() {
-  digitalWrite(relay1, LOW);
+  digitalWrite(relay1, LOw);
   digitalWrite(relay2, HIGH);
-  digitalWrite(relay3, LOW);
-  digitalWrite(relay4, HIGH);
+  digitalWrite(relay3, HIGH);
+  digitalWrite(relay4, LOW);
 }
 
 // 브레이크 적용 함수
 void applyBrakes() {
   digitalWrite(relay5, HIGH);
   digitalWrite(relay6, LOW);
-  digitalWrite(relay7, HIGH);
-  digitalWrite(relay8, LOW);
+  digitalWrite(relay7, LOW);
+  digitalWrite(relay8, HIGH);
 }
 
 // 브레이크 해제 함수
 void releaseBrakes() {
   digitalWrite(relay5, LOW);
   digitalWrite(relay6, HIGH);
-  digitalWrite(relay7, LOW);
-  digitalWrite(relay8, HIGH);
+  digitalWrite(relay7, HIGH);
+  digitalWrite(relay8, LOW);
 }
 
 // 거리 측정 함수
