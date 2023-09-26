@@ -24,19 +24,22 @@ const int relay6 = 12;
 const int relay7 = 13;
 const int relay8 = 14;
 
-const float wheelDiameter = 0.5;  // 바퀴 지름 (미터)
+const float wheelDiameter = 0.5; // 바퀴 지름 (미터)
 const float wheelCircumference = wheelDiameter * 3.14159;
-const int thresholdAngle = 10;  // 기울기 임계값 (도)
-const int thresholdSpeed = 10;  // 속도 임계값 (km/h)
+const int thresholdUphillAngle = 45;   // 오르막 기울기 임계값 (도)
+const int thresholdDownhillAngle = 55; // 오르막 기울기 임계값 (도)
+const int thresholdSpeed = 7;          // 속도 임계값 (km/h)
 
 // 속도 측정 변수
 unsigned long prevMillis = 0;
 float currentSpeed = 0;
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
   Wire.begin();
-  if (!accel.begin()) {
+  if (!accel.begin())
+  {
     Serial.println("가속도 센서 인식 실패");
     while (1)
       ;
@@ -51,7 +54,8 @@ void setup() {
   pinMode(ultrasonicTrigger, OUTPUT);
   pinMode(ultrasonicEcho, INPUT);
 
-  for (int i = relay1; i <= relay8; i++) {
+  for (int i = relay1; i <= relay8; i++)
+  {
     pinMode(i, OUTPUT);
     digitalWrite(i, LOW);
   }
@@ -60,45 +64,92 @@ void setup() {
   digitalWrite(ledPin, LOW);
 }
 
-void loop() {
-  checkSafety();
+void loop()
+{
+  if (checkSafety() == 0 && detectFallAndSendAlert() == 0) // 사용자 착석감지, 넘어짐 감지
+  {
+    if (adjustWheelchairAngle() == 1) // 오르막일때
+    {
+      retractFrontWheels(); // 앞바퀴 늘어남
+    }
+    else if (adjustWheelchairAngle() == 0) // 내리막일때
+    {
+      extendFrontWheels(); // 앞바퀴 줄어듬
+    }
+    else if (adjustWheelchairAngle() == 2) // 경사가 평행할때
+    {
+      stopFrontWheels(); // 앞바퀴 멈춤
+    }
 
-  adjustWheelchairAngle();
-  detectFallAndSendAlert();
+    if (detectObstacleAndStop() == 1 || detectOverspeedAndStop() == 1) // 장애물감지, 속도감지
+    {
+      applyBrakes();
+    }
+    else
+    {
+      releaseBrakes();
+    }
+  }
+  else // 미착석, 넘어짐 감지시 브레이크
+  {
+    applyBrakes();
+  }
   controlAutoLight();
-  detectObstacleAndStop();
-  detectOverspeedAndStop();
-
   printDebugInfo();
 }
 
 // 압력 센서 및 안전벨트 스위치 확인 함수
-void checkSafety() {
-  if (digitalRead(pressureSensor) == LOW || digitalRead(safetyBeltSwitch) == LOW) {
-    applyBrakes();
-  } else {
-    releaseBrakes();
+int checkSafety()
+{
+  if (digitalRead(pressureSensor) == HIGH || digitalRead(safetyBeltSwitch) == HIGH)
+  {
+    return 0;
+  }
+  else
+  {
+    return 1;
   }
 }
 
 // 경사로 기울기 조절 함수
-void adjustWheelchairAngle() {
-  bool isUphill = digitalRead(tiltSensor);
+int adjustWheelchairAngle()
+{
+  bool isTilted = digitalRead(tiltSensor);
   int rawAccelValue = analogRead(accelSensor);
   int filteredAccelValue = filterNoise(rawAccelValue);
   int angle = calculateAngle(filteredAccelValue);
 
-  if (angle > thresholdAngle) {
-    if (isUphill) {
-      retractFrontWheels();
-    } else {
-      extendFrontWheels();
+  if (angle < thresholdUphillAngle)
+  { // 오르막
+    if (isTilted)
+    {
+      return 1;
     }
+    else
+    {
+      return 2;
+    }
+  }
+  else if (angle > thresholdDownhillAngle)
+  { // 내리막
+    if (isTilted)
+    {
+      return 0;
+    }
+    else
+    {
+      return 2;
+    }
+  }
+  else
+  { // 경사로 평행
+    return 2;
   }
 }
 
 // 가속도 센서 값에서 기울기 각도 계산 함수
-int calculateAngle(int filteredAccelValue) {
+int calculateAngle(int filteredAccelValue)
+{
   sensors_event_t event;
   accel.getEvent(&event);
   float x_accel = event.acceleration.x;
@@ -108,52 +159,72 @@ int calculateAngle(int filteredAccelValue) {
 }
 
 // 넘어짐 감지 및 자동 신고 함수
-void detectFallAndSendAlert() {
+int detectFallAndSendAlert()
+{
   bool isTilted = digitalRead(tiltSensor);
   int rawAccelValue = analogRead(accelSensor);
   int filteredAccelValue = filterNoise(rawAccelValue);
   int angle = calculateAngle(filteredAccelValue);
 
-  if (isTilted && angle > 90) {
+  if (isTilted && angle > 90)
+  {
     sendEmergencyAlert(1);
+    return 1;
+  }
+  else
+  {
+    return 0;
   }
 }
 
 // 오토 라이트 제어 함수
-void controlAutoLight() {
+void controlAutoLight()
+{
   int rawLightValue = analogRead(lightSensor);
   int filteredLightValue = filterNoise(rawLightValue);
-  if (filteredLightValue < 100) {
+  if (filteredLightValue < 100)
+  {
     digitalWrite(ledPin, HIGH);
-  } else {
+  }
+  else
+  {
     digitalWrite(ledPin, LOW);
   }
 }
 
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
-void detectObstacleAndStop() {
+int detectObstacleAndStop()
+{
   long distance = measureDistance();
 
-  if (distance < 50) {
-    applyBrakes();
-  } else {
-    releaseBrakes();
+  if (distance < 50)
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
   }
 }
 
 // 과속 감지 및 긴급 정지 함수
-void detectOverspeedAndStop() {
+int detectOverspeedAndStop()
+{
   measureSpeed();
 
-  if (currentSpeed > thresholdSpeed) {
-    applyBrakes();
-  } else {
-    releaseBrakes();
+  if (currentSpeed > thresholdSpeed)
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
   }
 }
 
 // 노이즈 필터링 함수
-int filterNoise(int rawValue) {
+int filterNoise(int rawValue)
+{
   static int values[10];
   static int index = 0;
   static int sum = 0;
@@ -168,7 +239,8 @@ int filterNoise(int rawValue) {
 }
 
 // 앞바퀴 길이 확장 함수
-void extendFrontWheels() {
+void extendFrontWheels()
+{
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, LOW);
   digitalWrite(relay3, LOW);
@@ -176,15 +248,26 @@ void extendFrontWheels() {
 }
 
 // 앞바퀴 길이 축소 함수
-void retractFrontWheels() {
-  digitalWrite(relay1, LOw);
+void retractFrontWheels()
+{
+  digitalWrite(relay1, LOW);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, HIGH);
   digitalWrite(relay4, LOW);
 }
 
+// 앞바퀴 멈춤 함수
+void stopFrontWheels()
+{
+  digitalWrite(relay1, LOW);
+  digitalWrite(relay2, HIGH);
+  digitalWrite(relay3, LOW);
+  digitalWrite(relay4, HIGH);
+}
+
 // 브레이크 적용 함수
-void applyBrakes() {
+void applyBrakes()
+{
   digitalWrite(relay5, HIGH);
   digitalWrite(relay6, LOW);
   digitalWrite(relay7, LOW);
@@ -192,7 +275,8 @@ void applyBrakes() {
 }
 
 // 브레이크 해제 함수
-void releaseBrakes() {
+void releaseBrakes()
+{
   digitalWrite(relay5, LOW);
   digitalWrite(relay6, HIGH);
   digitalWrite(relay7, HIGH);
@@ -200,7 +284,8 @@ void releaseBrakes() {
 }
 
 // 거리 측정 함수
-long measureDistance() {
+long measureDistance()
+{
   digitalWrite(ultrasonicTrigger, LOW);
   delayMicroseconds(2);
   digitalWrite(ultrasonicTrigger, HIGH);
@@ -214,38 +299,45 @@ long measureDistance() {
 }
 
 // 속도 측정 함수
-void measureSpeed() {
+void measureSpeed()
+{
   unsigned long currentMillis = millis();
 
-  if (digitalRead(speedSensor) == HIGH && prevMillis == 0) {
+  if (digitalRead(speedSensor) == HIGH && prevMillis == 0)
+  {
     prevMillis = currentMillis;
-  } else if (digitalRead(speedSensor) == LOW && prevMillis > 0) {
+  }
+  else if (digitalRead(speedSensor) == LOW && prevMillis > 0)
+  {
     unsigned long timeElapsed = currentMillis - prevMillis;
-    float speed = (wheelCircumference / timeElapsed) * 1000;  // m/s로 변환
+    float speed = (wheelCircumference / timeElapsed) * 1000; // m/s로 변환
     currentSpeed = speed;
     prevMillis = 0;
   }
 }
 
 // 비상 경보 전송 함수
-void sendEmergencyAlert(bool felldown) {
-  float gpsLocation[2] = {0,0};
+void sendEmergencyAlert(bool felldown)
+{
+  float gpsLocation[2] = {0, 0};
   String message;
   String sum;
   char sLatF[15];
   char sLongF[15];
-  dtostrf(gpsLocation[0],11,6,sLatF);
-  dtostrf(gpsLocation[1],11,6,sLongF);
-  if(felldown){
+  dtostrf(gpsLocation[0], 11, 6, sLatF);
+  dtostrf(gpsLocation[1], 11, 6, sLongF);
+  if (felldown)
+  {
     sum = "T,";
   }
-  else{
+  else
+  {
     sum = "F,";
   }
   sum += sLatF;
   sum += ",";
   sum += sLongF;
-  //sum += ",";
+  // sum += ",";
   message = sum.length();
   message += ",";
   message += sum;
@@ -253,14 +345,16 @@ void sendEmergencyAlert(bool felldown) {
   sendMessage(message);
 }
 
-void sendMessage(String message){ //미니보드 전송
+void sendMessage(String message)
+{ // 미니보드 전송
   Wire.beginTransmission(1);
   Wire.write(message.c_str());
   Wire.endTransmission(1);
 }
 
 // 테스트 및 디버깅을 위한 시리얼 출력 함수
-void printDebugInfo() {
+void printDebugInfo()
+{
   Serial.print("압력 센서: ");
   Serial.println(digitalRead(pressureSensor));
   Serial.print("안전벨트 스위치: ");
