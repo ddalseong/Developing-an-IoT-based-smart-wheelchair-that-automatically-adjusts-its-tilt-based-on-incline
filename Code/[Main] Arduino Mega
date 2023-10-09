@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
+#include <NewPing.h>
 
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
@@ -10,8 +11,9 @@ const int safetyBeltSwitch = 2;
 const int tiltSensor = 3;
 const int lightSensor = A2;
 const int speedSensor = 4;
-const int ultrasonicTrigger = 5;
-const int ultrasonicEcho = 6;
+const int TRIGGER_PIN = 5;
+const int ECHO_PIN = 6;
+const int MAX_DISTANCE = 200;
 const int ledPin = 15;
 
 const int relay1 = 7;
@@ -28,6 +30,11 @@ const float wheelCircumference = wheelDiameter * 3.14159;
 const int thresholdUphillAngle = -10;    // 오르막 기울기 임계값 (도)
 const int thresholdDownhillAngle = 10;  // 오르막 기울기 임계값 (도)
 const int thresholdSpeed = 6;           // 속도 임계값 (km/h)
+const int thresholdLight = 100;           // 밝기 임계값
+const int thresholdLength = 50;           // 거리 임계값
+const int thresholdFalldownAngle = 40;           // 거리 임계값
+
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); //초음파센서 라이브러리
 
 // 속도 측정 변수
 unsigned long prevMillis = 0;
@@ -47,8 +54,6 @@ void setup() {
   pinMode(tiltSensor, INPUT);
   pinMode(speedSensor, INPUT);
   pinMode(lightSensor, INPUT);
-  pinMode(ultrasonicTrigger, OUTPUT);
-  pinMode(ultrasonicEcho, INPUT);
 
   for (int i = relay1; i <= relay8; i++) {
     pinMode(i, OUTPUT);
@@ -60,127 +65,161 @@ void setup() {
 }
 
 void loop() {
+  int uphillOrDownhill = adjustWheelchairAngle();
   if (checkSafety() == 0 && detectFallAndSendAlert() == 0)  // 사용자 착석감지, 넘어짐 감지
   {
-    if (adjustWheelchairAngle() == 1)  // 오르막일때
+    if (uphillOrDownhill == 1)  // 오르막일때
     {
+      Serial.println("오르막 감지 기능 실행");
       retractFrontWheels();                   // 앞바퀴 늘어남
-    } else if (adjustWheelchairAngle() == 0)  // 내리막일때
+    } else if (uphillOrDownhill == 0)  // 내리막일때
     {
+      Serial.println("내리막 감지 기능 실행");
       extendFrontWheels();                    // 앞바퀴 줄어듬
-    } else if (adjustWheelchairAngle() == 2)  // 경사가 평행할때
+    } else if (uphillOrDownhill == 2)  // 경사가 평행할때
     {
+      Serial.println("경사 평행 기능 실행");
       stopFrontWheels();  // 앞바퀴 멈춤
     }
 
     if (detectObstacleAndStop() == 1 || detectOverspeedAndStop() == 1)  // 장애물감지, 속도감지
     {
+      Serial.println("장애물이 감지되거나 속도가 빠름 기능 실행");
       applyBrakes();
     } else {
+      Serial.println("장애물이 없고 속도가 느림 기능 실행");
       releaseBrakes();
     }
   } else  // 미착석, 넘어짐 감지시 브레이크
   {
+    Serial.println("미착석, 넘어짐 감지 기능 실행");
     applyBrakes();
   }
   controlAutoLight();
-  printDebugInfo();
 }
 
 // 압력 센서 및 안전벨트 스위치 확인 함수
 int checkSafety() {
-  return 0;  //사람 앉음 테스트
+  Serial.println("압력 센서 및 안전벨트 스위치 확인 함수 실행");
+  //return 0;  //사람 앉음 테스트
   if (digitalRead(pressureSensor) > 10 && digitalRead(safetyBeltSwitch) == LOW) {
+    Serial.println("사람 앉음 센서 감지됨");
     return 0;
   } else {
+    Serial.println("사람 앉음 센서 미감지됨");
     return 1;
   }
 }
 
 // 경사로 기울기 조절 함수
 int adjustWheelchairAngle() {
+  Serial.println("경사로 기울기 조절 함수 실행");
   float angle = calculateAngle();
   bool isTilted = digitalRead(tiltSensor);
+  Serial.print("현재 각도 : "); Serial.print(angle); Serial.print(" 기울기센서 : "); Serial.println(isTilted);
 
   if (angle < thresholdUphillAngle) {  // 오르막
     if (isTilted) {
+      Serial.println("오르막 로직 감지");
       return 1;
     } else {
+      Serial.println("기울기 센서 미감지로 평행 로직 감지");
       return 2;
     }
   } else if (angle > thresholdDownhillAngle) {  // 내리막
     if (isTilted) {
+      Serial.println("내리막 로직 감지");
       return 0;
     } else {
+      Serial.println("기울기 센서 미감지로 평행 로직 감지");
       return 2;
     }
   } else {  // 경사로 평행
+    Serial.println("한계각도 미충족으로 평행 로직 감지");
     return 2;
   }
 }
 
 // 가속도 센서 값에서 기울기 각도 계산 함수
 float calculateAngle() {
+  Serial.println("가속도 센서 값에서 기울기 각도 계산 함수 실행");
   sensors_event_t event;
   accel.getEvent(&event);
 
   float roll = atan2(event.acceleration.y, event.acceleration.z) * 180 / M_PI;
   float pitch = atan2(-event.acceleration.x, sqrt(event.acceleration.y * event.acceleration.y + event.acceleration.z * event.acceleration.z)) * 180 / M_PI;
 
-  Serial.print("Roll: "); Serial.print(roll); Serial.print("°  ");
-  Serial.print("Pitch: "); Serial.print(pitch); Serial.println("°");
-  
-  return roll;
+  Serial.print("Roll 각도: "); Serial.print(roll); Serial.print("°  ");
+  Serial.print("Pitch 각도: "); Serial.print(pitch); Serial.println("°");
+
+  return roll; //롤 피치 중에 하나 선택
 }
 
 // 넘어짐 감지 및 자동 신고 함수
 int detectFallAndSendAlert() {
+  Serial.println("넘어짐 감지 및 자동 신고 함수 실행");
   bool isTilted = digitalRead(tiltSensor);
   float angle = calculateAngle();
+  Serial.print("현재 각도 : "); Serial.print(angle); Serial.print(" 기울기센서 : "); Serial.println(isTilted);
 
-  if (isTilted && angle > 90) {
+  if (isTilted && ((angle > thresholdFalldownAngle) || (angle < (-1)*thresholdFalldownAngle))) {
+    Serial.println("넘어짐 로직 감지됨");
     sendEmergencyAlert(1);
     return 1;
   } else {
+    Serial.println("넘어짐 로직 미 감지됨");
     return 0;
   }
 }
 
 // 오토 라이트 제어 함수
 void controlAutoLight() {
+  Serial.println("오토 라이트 제어 함수 실행");
   int rawLightValue = analogRead(lightSensor);
   int filteredLightValue = filterNoise(rawLightValue);
-  if (filteredLightValue < 100) {
+  Serial.print("현재 밝기 : "); Serial.println(filteredLightValue);
+  if (filteredLightValue < thresholdLight) {
+    Serial.println("임계밝기보다 낮으므로 전방 조명 켜기");
     digitalWrite(ledPin, HIGH);
   } else {
+    Serial.println("임계밝기보다 밝으므로 전방 조명 끄기");
     digitalWrite(ledPin, LOW);
   }
 }
 
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
 int detectObstacleAndStop() {
-  long distance = measureDistance();
+  Serial.println("장애물 감지 및 충돌 방지/긴급 정지 함수 실행");
+  int distance = sonar.ping_cm(); //초음파센서 라이브러리 거리 측정
+  Serial.print("현재 거리(cm) : "); Serial.println(distance);
 
-  if (distance < 50) {
+  if (distance < thresholdLength) {
+    Serial.println("한계거리보다 가까움 장애물 감지 로직 감지");
     return 1;
   } else {
+    Serial.println("한계거리보다 멂 장애물 미 감지 로직 감지");
     return 0;
   }
 }
 
 // 과속 감지 및 긴급 정지 함수
 int detectOverspeedAndStop() {
+  Serial.println("과속 감지 및 긴급 정지 함수 실행");
   measureSpeed();
+  Serial.print("현재 속도(km) : "); Serial.println(currentSpeed);
 
   if (currentSpeed > thresholdSpeed) {
+    Serial.println("한계속도보다 빠름 과속 로직 감지");
     return 1;
   } else {
+    Serial.println("한계속도보다 느림 미 과속 로직 감지");
     return 0;
   }
 }
 
 // 노이즈 필터링 함수
 int filterNoise(int rawValue) {
+  Serial.println("노이즈 필터링 함수 실행");
   static int values[10];
   static int index = 0;
   static int sum = 0;
@@ -196,6 +235,7 @@ int filterNoise(int rawValue) {
 
 // 앞바퀴 길이 확장 함수
 void extendFrontWheels() {
+  Serial.println("앞바퀴 길이 확장 함수 실행");
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, LOW);
   digitalWrite(relay3, HIGH);
@@ -204,6 +244,7 @@ void extendFrontWheels() {
 
 // 앞바퀴 길이 축소 함수
 void retractFrontWheels() {
+  Serial.println("앞바퀴 길이 축소 함수 실행");
   digitalWrite(relay1, LOW);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, LOW);
@@ -212,6 +253,7 @@ void retractFrontWheels() {
 
 // 앞바퀴 멈춤 함수
 void stopFrontWheels() {
+  Serial.println("앞바퀴 길이 멈춤 함수 실행");
   digitalWrite(relay1, LOW);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, LOW);
@@ -220,6 +262,7 @@ void stopFrontWheels() {
 
 // 브레이크 적용 함수
 void applyBrakes() {
+  Serial.println("브레이크 적용 함수 실행");
   digitalWrite(relay5, HIGH);
   digitalWrite(relay6, LOW);
   digitalWrite(relay7, HIGH);
@@ -228,29 +271,16 @@ void applyBrakes() {
 
 // 브레이크 해제 함수
 void releaseBrakes() {
+  Serial.println("브레이크 해제 함수 실행");
   digitalWrite(relay5, LOW);
   digitalWrite(relay6, HIGH);
   digitalWrite(relay7, LOW);
   digitalWrite(relay8, HIGH);
 }
 
-// 거리 측정 함수
-long measureDistance() {
-  digitalWrite(ultrasonicTrigger, LOW);
-  delayMicroseconds(2);
-  digitalWrite(ultrasonicTrigger, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(ultrasonicTrigger, LOW);
-
-  long duration = pulseIn(ultrasonicEcho, HIGH);
-  long distance = (duration / 2) / 29.1;
-
-  return distance;
-}
-
 // 속도 측정 함수
 void measureSpeed() {
-  Serial.println("스피드 감지 작동");
+  Serial.println("속도 측정 함수 실행");
   unsigned long currentMillis = millis();
 
   if (digitalRead(speedSensor) == HIGH && prevMillis == 0) {
@@ -265,6 +295,7 @@ void measureSpeed() {
 
 // 비상 경보 전송 함수
 void sendEmergencyAlert(bool felldown) {
+  Serial.println("비상 경보 전송 함수 실행");
   float gpsLocation[2] = { 0, 0 };
   String message;
   String sum;
@@ -288,27 +319,10 @@ void sendEmergencyAlert(bool felldown) {
   sendMessage(message);
 }
 
-void sendMessage(String message) {  // 미니보드 전송
+// 와이파이 보드로 메세지 전송 함수
+void sendMessage(String message) {
+  Serial.println("와이파이 보드로 메세지 전송 함수 실행");
   Wire.beginTransmission(1);
   Wire.write(message.c_str());
   Wire.endTransmission(1);
-}
-
-// 테스트 및 디버깅을 위한 시리얼 출력 함수
-void printDebugInfo() {
-  Serial.print("압력 센서: ");
-  Serial.println(analogRead(pressureSensor));
-  Serial.print("안전벨트 스위치: ");
-  Serial.println(digitalRead(safetyBeltSwitch));
-  Serial.print("기울기 센서: ");
-  Serial.println(digitalRead(tiltSensor));
-  Serial.print("조도 센서: ");
-  Serial.println(analogRead(lightSensor));
-  Serial.print("속도 센서: ");
-  Serial.println(digitalRead(speedSensor));
-  Serial.print("거리: ");
-  Serial.println(measureDistance());
-  Serial.print("속도: ");
-  Serial.println(currentSpeed);
-  Serial.print("------------------------------------------------------\n");
 }
