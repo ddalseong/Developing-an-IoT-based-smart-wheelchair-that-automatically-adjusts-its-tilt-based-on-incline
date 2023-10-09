@@ -33,6 +33,7 @@ const int thresholdSpeed = 6;           // 속도 임계값 (km/h)
 const int thresholdLight = 100;           // 밝기 임계값
 const int thresholdLength = 50;           // 거리 임계값
 const int thresholdFalldownAngle = 40;           // 거리 임계값
+const int thresholdPressure = 10;           // 압력 센서 임계값
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); //초음파센서 라이브러리
 
@@ -102,7 +103,7 @@ void loop() {
 int checkSafety() {
   Serial.println("압력 센서 및 안전벨트 스위치 확인 함수 실행");
   //return 0;  //사람 앉음 테스트
-  if (digitalRead(pressureSensor) > 10 && digitalRead(safetyBeltSwitch) == LOW) {
+  if (digitalRead(pressureSensor) > thresholdPressure && digitalRead(safetyBeltSwitch) == LOW) {
     Serial.println("사람 앉음 센서 감지됨");
     return 0;
   } else {
@@ -123,7 +124,7 @@ int adjustWheelchairAngle() {
       Serial.println("오르막 로직 감지");
       return 1;
     } else {
-      Serial.println("기울기 센서 미감지로 평행 로직 감지");
+      Serial.println("오르막이지만 기울기 센서 미감지로 평행 로직 감지");
       return 2;
     }
   } else if (angle > thresholdDownhillAngle) {  // 내리막
@@ -131,7 +132,7 @@ int adjustWheelchairAngle() {
       Serial.println("내리막 로직 감지");
       return 0;
     } else {
-      Serial.println("기울기 센서 미감지로 평행 로직 감지");
+      Serial.println("내리막이지만 기울기 센서 미감지로 평행 로직 감지");
       return 2;
     }
   } else {  // 경사로 평행
@@ -164,10 +165,11 @@ int detectFallAndSendAlert() {
 
   if (isTilted && ((angle > thresholdFalldownAngle) || (angle < (-1)*thresholdFalldownAngle))) {
     Serial.println("넘어짐 로직 감지됨");
-    sendEmergencyAlert(1);
+    sendEmergencyAlert(true);
     return 1;
   } else {
     Serial.println("넘어짐 로직 미 감지됨");
+    sendEmergencyAlert(false);
     return 0;
   }
 }
@@ -324,5 +326,19 @@ void sendMessage(String message) {
   Serial.println("와이파이 보드로 메세지 전송 함수 실행");
   Wire.beginTransmission(1);
   Wire.write(message.c_str());
-  Wire.endTransmission(1);
+  int status = Wire.endTransmission(true);
+  switch (status) {
+    case 0:
+      Serial.println("메세지 전송 성공"); break;
+    case 1:
+      Serial.println("메세지 전송 실패 : 데이터가 너무 긺"); break;
+    case 2:
+      Serial.println("메세지 전송 실패 : 주소 전송 실패"); break;
+    case 3:
+      Serial.println("메세지 전송 실패 : 데이터 전송 실패"); break;
+    case 4:
+      Serial.println("메세지 전송 실패 : 기타 오류"); break;
+    case 5:
+      Serial.println("메세지 전송 실패 : 타임아웃(시간초과)"); break;
+  }
 }
