@@ -8,7 +8,6 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 const int pressureSensor = A0;
 const int safetyBeltSwitch = 2;
 const int tiltSensor = 3;
-const int accelSensor = A1;
 const int lightSensor = A2;
 const int speedSensor = 4;
 const int ultrasonicTrigger = 5;
@@ -26,9 +25,9 @@ const int relay8 = 14;
 
 const float wheelDiameter = 0.5;  // 바퀴 지름 (미터)
 const float wheelCircumference = wheelDiameter * 3.14159;
-const int thresholdUphillAngle = 45;    // 오르막 기울기 임계값 (도)
-const int thresholdDownhillAngle = 55;  // 오르막 기울기 임계값 (도)
-const int thresholdSpeed = 7;           // 속도 임계값 (km/h)
+const int thresholdUphillAngle = -10;    // 오르막 기울기 임계값 (도)
+const int thresholdDownhillAngle = 10;  // 오르막 기울기 임계값 (도)
+const int thresholdSpeed = 6;           // 속도 임계값 (km/h)
 
 // 속도 측정 변수
 unsigned long prevMillis = 0;
@@ -47,7 +46,6 @@ void setup() {
   pinMode(safetyBeltSwitch, INPUT);
   pinMode(tiltSensor, INPUT);
   pinMode(speedSensor, INPUT);
-  pinMode(accelSensor, INPUT);
   pinMode(lightSensor, INPUT);
   pinMode(ultrasonicTrigger, OUTPUT);
   pinMode(ultrasonicEcho, INPUT);
@@ -101,10 +99,8 @@ int checkSafety() {
 
 // 경사로 기울기 조절 함수
 int adjustWheelchairAngle() {
+  float angle = calculateAngle();
   bool isTilted = digitalRead(tiltSensor);
-  int rawAccelValue = analogRead(accelSensor);
-  int filteredAccelValue = filterNoise(rawAccelValue);
-  int angle = calculateAngle(filteredAccelValue);
 
   if (angle < thresholdUphillAngle) {  // 오르막
     if (isTilted) {
@@ -124,29 +120,23 @@ int adjustWheelchairAngle() {
 }
 
 // 가속도 센서 값에서 기울기 각도 계산 함수
-int calculateAngle(int filteredAccelValue) {
+float calculateAngle() {
   sensors_event_t event;
   accel.getEvent(&event);
-  float x_accel = event.acceleration.x;
 
-  float angle = atan2(x_accel, sqrt(pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2))) * 180.0 / PI;
-  Serial.print("가속도 센서 값 x : ");
-  Serial.print(event.acceleration.x);
-  Serial.print("  가속도 센서 값 y : ");
-  Serial.print(event.acceleration.y);
-  Serial.print("  가속도 센서 값 z : ");
-  Serial.print(event.acceleration.z);
-  Serial.print("  각도 값 : ");
-  Serial.print(angle);
-  return angle;
+  float roll = atan2(event.acceleration.y, event.acceleration.z) * 180 / M_PI;
+  float pitch = atan2(-event.acceleration.x, sqrt(event.acceleration.y * event.acceleration.y + event.acceleration.z * event.acceleration.z)) * 180 / M_PI;
+
+  Serial.print("Roll: "); Serial.print(roll); Serial.print("°  ");
+  Serial.print("Pitch: "); Serial.print(pitch); Serial.println("°");
+  
+  return roll;
 }
 
 // 넘어짐 감지 및 자동 신고 함수
 int detectFallAndSendAlert() {
   bool isTilted = digitalRead(tiltSensor);
-  int rawAccelValue = analogRead(accelSensor);
-  int filteredAccelValue = filterNoise(rawAccelValue);
-  int angle = calculateAngle(filteredAccelValue);
+  float angle = calculateAngle();
 
   if (isTilted && angle > 90) {
     sendEmergencyAlert(1);
@@ -312,8 +302,6 @@ void printDebugInfo() {
   Serial.println(digitalRead(safetyBeltSwitch));
   Serial.print("기울기 센서: ");
   Serial.println(digitalRead(tiltSensor));
-  Serial.print("가속도 센서: ");
-  Serial.println(analogRead(accelSensor));
   Serial.print("조도 센서: ");
   Serial.println(analogRead(lightSensor));
   Serial.print("속도 센서: ");
