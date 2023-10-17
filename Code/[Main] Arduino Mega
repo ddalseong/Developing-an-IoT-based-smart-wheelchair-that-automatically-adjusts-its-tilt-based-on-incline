@@ -1,7 +1,6 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
-#include <NewPing.h>
 
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
@@ -13,7 +12,6 @@ const int lightSensor = A2;
 const int speedSensor = 4;
 const int TRIGGER_PIN = 5;
 const int ECHO_PIN = 6;
-const int MAX_DISTANCE = 200;
 const int ledPin = 15;
 
 const int relay1 = 7;
@@ -34,8 +32,6 @@ const int thresholdLight = 100;           // 밝기 임계값
 const int thresholdLength = 50;           // 거리 임계값
 const int thresholdFalldownAngle = 40;           // 거리 임계값
 const int thresholdPressure = 10;           // 압력 센서 임계값
-
-NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); //초음파센서 라이브러리
 
 // 속도 측정 변수
 unsigned long prevMillis = 0;
@@ -103,11 +99,14 @@ void loop() {
 int checkSafety() {
   Serial.println("압력 센서 및 안전벨트 스위치 확인 함수 실행");
   //return 0;  //사람 앉음 테스트
-  if (digitalRead(pressureSensor) > thresholdPressure && digitalRead(safetyBeltSwitch) == LOW) {
+  if (analogRead(pressureSensor) > thresholdPressure && digitalRead(safetyBeltSwitch) == LOW) {
     Serial.println("사람 앉음 센서 감지됨");
     return 0;
   } else {
-    Serial.println("사람 앉음 센서 미감지됨");
+    Serial.print("사람 앉음 센서 미감지됨, 압력센서 값 : ");
+    Serial.print(analogRead(pressureSensor));
+    Serial.print(" 안전벨트 스위치 : ");
+    Serial.println(digitalRead(safetyBeltSwitch));
     return 1;
   }
 }
@@ -192,7 +191,14 @@ void controlAutoLight() {
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
 int detectObstacleAndStop() {
   Serial.println("장애물 감지 및 충돌 방지/긴급 정지 함수 실행");
-  int distance = sonar.ping_cm(); //초음파센서 라이브러리 거리 측정
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  long distance = ((340*duration)/10000)/2;
+
   Serial.print("현재 거리(cm) : "); Serial.println(distance);
 
   if (distance < thresholdLength) {
