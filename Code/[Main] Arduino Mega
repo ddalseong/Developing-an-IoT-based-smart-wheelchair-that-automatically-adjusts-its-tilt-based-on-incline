@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
+#include <NewPing.h>
 
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
@@ -29,16 +30,18 @@ const int thresholdUphillAngle = -10;    // 오르막 기울기 임계값 (도)
 const int thresholdDownhillAngle = 10;  // 오르막 기울기 임계값 (도)
 const int thresholdSpeed = 6;           // 속도 임계값 (km/h)
 const int thresholdLight = 100;           // 밝기 임계값
-const int thresholdLength = 50;           // 거리 임계값
+const int thresholdLength = 30;           // 거리 임계값
 const int thresholdFalldownAngle = 40;           // 거리 임계값
 const int thresholdPressure = 10;           // 압력 센서 임계값
 
 // 속도 측정 변수
 unsigned long prevMillis = 0;
 float currentSpeed = 0;
+NewPing sonar(TRIGGER_PIN, ECHO_PIN);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Serial2.begin(9600);
   Wire.begin();
   if (!accel.begin()) {
     Serial.println("가속도 센서 인식 실패, 재부팅후 인식바람");
@@ -98,7 +101,7 @@ void loop() {
 // 압력 센서 및 안전벨트 스위치 확인 함수
 int checkSafety() {
   Serial.println("압력 센서 및 안전벨트 스위치 확인 함수 실행");
-  //return 0;  //사람 앉음 테스트
+  return 0;  //사람 앉음 테스트
   
   Serial.print("압력센서 값 : ");
   Serial.print(analogRead(pressureSensor));
@@ -109,7 +112,7 @@ int checkSafety() {
     Serial.println("사람 앉음 센서 감지됨");
     return 0;
   } else {
-    Serial.print("사람 앉음 센서 미감지됨");
+    Serial.println("사람 앉음 센서 미감지됨");
     return 1;
   }
 }
@@ -194,13 +197,7 @@ void controlAutoLight() {
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
 int detectObstacleAndStop() {
   Serial.println("장애물 감지 및 충돌 방지/긴급 정지 함수 실행");
-  digitalWrite(TRIGGER_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIGGER_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIGGER_PIN, LOW);
-  long duration = pulseIn(ECHO_PIN, HIGH);
-  long distance = ((340*duration)/10000)/2;
+  int distance = sonar.ping_cm();
 
   Serial.print("현재 거리(cm) : "); Serial.println(distance);
 
@@ -307,25 +304,15 @@ void measureSpeed() {
 // 비상 경보 전송 함수
 void sendEmergencyAlert(bool felldown) {
   Serial.println("비상 경보 전송 함수 실행");
-  float gpsLocation[2] = { 0, 0 };
   String message;
-  String sum;
-  char sLatF[15];
-  char sLongF[15];
-  dtostrf(gpsLocation[0], 11, 6, sLatF);
-  dtostrf(gpsLocation[1], 11, 6, sLongF);
+
   if (felldown) {
-    sum = "T,";
+    message = "D";
+    Serial.println("넘어졌다고 경보 전송함");
   } else {
-    sum = "F,";
+    message= "U";
+    Serial.println("안 넘어졌다고 전송함");
   }
-  sum += sLatF;
-  sum += ",";
-  sum += sLongF;
-  // sum += ",";
-  message = sum.length();
-  message += ",";
-  message += sum;
   Serial.println(message);
   sendMessage(message);
 }
@@ -333,21 +320,5 @@ void sendEmergencyAlert(bool felldown) {
 // 와이파이 보드로 메세지 전송 함수
 void sendMessage(String message) {
   Serial.println("와이파이 보드로 메세지 전송 함수 실행");
-  Wire.beginTransmission(1);
-  Wire.write(message.c_str());
-  int status = Wire.endTransmission(true);
-  switch (status) {
-    case 0:
-      Serial.println("메세지 전송 성공"); break;
-    case 1:
-      Serial.println("메세지 전송 실패 : 데이터가 너무 긺"); break;
-    case 2:
-      Serial.println("메세지 전송 실패 : 주소 전송 실패"); break;
-    case 3:
-      Serial.println("메세지 전송 실패 : 데이터 전송 실패"); break;
-    case 4:
-      Serial.println("메세지 전송 실패 : 기타 오류"); break;
-    case 5:
-      Serial.println("메세지 전송 실패 : 타임아웃(시간초과)"); break;
-  }
+  Serial2.println(message);
 }
