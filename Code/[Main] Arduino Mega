@@ -26,15 +26,17 @@ const int relay8 = 14;
 
 const float wheelDiameter = 50;                                    // 바퀴 지름 (cm)
 const float wheelCircumference = wheelDiameter * 3.141592 / 1000;  //(바퀴 원주 cm)
-const int thresholdUphillAngle = 10;                               // 오르막 기울기 임계값 (도)
-const int thresholdDownhillAngle = -10;                            // 내리막 기울기 임계값 (도)
-const int thresholdSpeed = 8;                                      // 속도 임계값 (km/h)
-const int thresholdLight = 100;                                    // 밝기 임계값
+const int thresholdUphillAngle = 3;                                // 오르막 기울기 임계값 (도)
+const int thresholdDownhillAngle = -3;                             // 내리막 기울기 임계값 (도)
+const int thresholdSpeed = 5;                                      // 속도 임계값 (km/h)
+const int thresholdLight = 300;                                    // 밝기 임계값
 const int thresholdLength = 30;                                    // 거리 임계값
-const int thresholdUphillFalldownAngle = 20;                       // 오르막 넘어짐 임계값
-const int thresholdDownhillFalldownAngle = -30;                    // 내리막 넘어짐 임계값
-const int thresholdPressure = 10;                                  // 압력 센서 임계값
-const int thresholdSpeedStopTime = 6000;                           //속도센서 정지 임계값
+const int thresholdUphillFalldownAngle = 13;                       // 오르막 넘어짐 임계값
+const int thresholdDownhillFalldownAngle = -13;                    // 내리막 넘어짐 임계값
+const int thresholdPressure = 100;                                 // 압력 센서 임계값
+const int thresholdSpeedStopTime = 3000;                           //속도센서 정지 임계값
+const int angleTuning = 8;                                         //각도 보정
+const int filteroverSpeed = 10;                                    //속도 쓰레기값 보정
 
 // 속도 측정 변수
 unsigned long time, oldtime, delta;
@@ -43,15 +45,13 @@ int swval = 0, oldswval = 0;
 float currentSpeed = 0;
 NewPing sonar(TRIGGER_PIN, ECHO_PIN);
 
+sensors_event_t event;
+
 void setup() {
   Serial.begin(115200);
   Serial2.begin(9600);
   Wire.begin();
-  if (!accel.begin()) {
-    Serial.println("가속도 센서 인식 실패, 재부팅후 인식바람");
-    while (1)
-      ;
-  }
+  accel.begin();
 
   pinMode(pressureSensor, INPUT);
   pinMode(safetyBeltSwitch, INPUT);
@@ -70,74 +70,51 @@ void setup() {
 
 void loop() {
   int uphillOrDownhill = adjustWheelchairAngle();
-  delay(20);
-  if (1 && detectFallAndSendAlert() == 0)  // 사용자 착석감지, 넘어짐 감지
+  if (checkSafety() == 0 && detectFallAndSendAlert() == 0)  // 사용자 착석감지, 넘어짐 감지
   {
     if (uphillOrDownhill == 1)  // 오르막일때
     {
       retractFrontWheels();  // 앞바퀴 늘어남
-      delay(20);
     } else if (uphillOrDownhill == 0)  // 내리막일때
     {
       extendFrontWheels();  // 앞바퀴 줄어듬
-      delay(20);
     } else if (uphillOrDownhill == 2)  // 경사가 평행할때
     {
       stopFrontWheels();  // 앞바퀴 멈춤
-      delay(20);
     }
     int overspeed = detectOverspeedAndStop();
-    delay(20);
 
     if (overspeed == 1 || detectObstacleAndStop() == 1)  // 장애물감지, 속도감지
     {
       applyBrakes();
-      delay(20);
-      if (overspeed == 1) {
-        delay(2000);
-        Serial.println("넘어짐 감지됨");
-      }
+      delay(2000);
     } else {
       releaseBrakes();
-      delay(20);
     }
   } else  // 미착석, 넘어짐 감지시 브레이크
   {
     applyBrakes();
-    delay(20);
   }
   controlAutoLight();
-  delay(20);
 }
 
 // 압력 센서 및 안전벨트 스위치 확인 함수
 int checkSafety() {
-  return 0;  //사람 앉음 테스트
-
   if (analogRead(pressureSensor) > thresholdPressure && digitalRead(safetyBeltSwitch) == LOW) {
     return 0;
   } else {
-
     return 1;
   }
 }
 
 // 경사로 기울기 조절 함수
 int adjustWheelchairAngle() {
-  float angle = calculateAngle();
+  float angle = calculateAngle() + (float)angleTuning;
   bool isTilted = digitalRead(tiltSensor);
   if (angle > thresholdUphillAngle) {  // 오르막
-    if (isTilted == 0) {
-      return 1;
-    } else {
-      return 2;
-    }
+    return 1;
   } else if (angle < thresholdDownhillAngle) {  // 내리막
-    if (isTilted == 1) {
-      return 0;
-    } else {
-      return 2;
-    }
+    return 0;
   } else {  // 경사로 평행
     return 2;
   }
@@ -145,11 +122,11 @@ int adjustWheelchairAngle() {
 
 // 가속도 센서 값에서 기울기 각도 계산 함수
 float calculateAngle() {
-  sensors_event_t event;
+
   accel.getEvent(&event);
 
   float roll = atan2(event.acceleration.y, event.acceleration.z) * 180 / M_PI;
-  float pitch = atan2(-event.acceleration.x, sqrt(event.acceleration.y * event.acceleration.y + event.acceleration.z * event.acceleration.z)) * 180 / M_PI;
+  //float pitch = atan2(-event.acceleration.x, sqrt(event.acceleration.y * event.acceleration.y + event.acceleration.z * event.acceleration.z)) * 180 / M_PI;
 
   return roll;  //롤 피치 중에 하나 선택
 }
@@ -158,7 +135,7 @@ float calculateAngle() {
 int detectFallAndSendAlert() {
   bool isTilted = digitalRead(tiltSensor);
   float angle = calculateAngle();
-  if (((angle > thresholdUphillFalldownAngle) && isTilted == 0) || ((angle < thresholdDownhillFalldownAngle) && isTilted == 1)) {
+  if (((angle > thresholdUphillFalldownAngle) && isTilted == 1) || ((angle < thresholdDownhillFalldownAngle) && isTilted == 0)) {
     sendEmergencyAlert(true);
     return 1;
   } else {
@@ -170,9 +147,10 @@ int detectFallAndSendAlert() {
 // 오토 라이트 제어 함수
 void controlAutoLight() {
   int rawLightValue = analogRead(lightSensor);
-  //int filteredLightValue = filterNoise(rawLightValue);
+  Serial.println(rawLightValue);
   if (rawLightValue < thresholdLight) {
     digitalWrite(ledPin, HIGH);
+    Serial.println("라이트 켜짐");
   } else {
     digitalWrite(ledPin, LOW);
   }
@@ -192,10 +170,10 @@ int detectObstacleAndStop() {
 int detectOverspeedAndStop() {
   measureSpeed();
   checkForStop();
-  if (currentSpeed > thresholdSpeed) {
-    return 1;
-  } else {
+  if (currentSpeed < thresholdSpeed || currentSpeed > filteroverSpeed) {
     return 0;
+  } else {
+    return 1;
   }
 }
 
@@ -261,12 +239,10 @@ void measureSpeed() {
   if (oldswval == LOW && swval == HIGH) {
     time = millis();
     delta = millis() - oldtime;
-    currentSpeed = wheelCircumference * 3600 / (float)delta;
-
+    currentSpeed = wheelCircumference * 36000 / (float)delta;
     oldtime = time;
   }
   oldswval = swval;
-  Serial.println(currentSpeed);
 }
 
 void checkForStop() {
