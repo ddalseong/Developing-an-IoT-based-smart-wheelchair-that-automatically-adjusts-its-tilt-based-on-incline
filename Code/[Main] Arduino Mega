@@ -26,8 +26,8 @@ const int relay8 = 14;
 
 const float wheelDiameter = 50;                                    // 바퀴 지름 (cm)
 const float wheelCircumference = wheelDiameter * 3.141592 / 1000;  //(바퀴 원주 cm)
-const int thresholdUphillAngle = 3;                                // 오르막 기울기 임계값 (도)
-const int thresholdDownhillAngle = -3;                             // 내리막 기울기 임계값 (도)
+const int thresholdUphillAngle = 1;                                // 오르막 기울기 임계값 (도)
+const int thresholdDownhillAngle = -1;                             // 내리막 기울기 임계값 (도)
 const int thresholdSpeed = 5;                                      // 속도 임계값 (km/h)
 const int thresholdLight = 300;                                    // 밝기 임계값
 const int thresholdLength = 25;                                    // 거리 임계값
@@ -96,6 +96,7 @@ void loop() {
     applyBrakes();
   }
   controlAutoLight();
+  delay(80);
 }
 
 // 압력 센서 및 안전벨트 스위치 확인 함수
