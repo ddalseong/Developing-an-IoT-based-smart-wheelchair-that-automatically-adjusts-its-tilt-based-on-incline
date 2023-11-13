@@ -30,9 +30,9 @@ const int thresholdUphillAngle = 3;                                // 오르막 
 const int thresholdDownhillAngle = -3;                             // 내리막 기울기 임계값 (도)
 const int thresholdSpeed = 5;                                      // 속도 임계값 (km/h)
 const int thresholdLight = 300;                                    // 밝기 임계값
-const int thresholdLength = 30;                                    // 거리 임계값
-const int thresholdUphillFalldownAngle = 13;                       // 오르막 넘어짐 임계값
-const int thresholdDownhillFalldownAngle = -13;                    // 내리막 넘어짐 임계값
+const int thresholdLength = 25;                                    // 거리 임계값
+const int thresholdUphillFalldownAngle = 15;                       // 오르막 넘어짐 임계값
+const int thresholdDownhillFalldownAngle = -15;                    // 내리막 넘어짐 임계값
 const int thresholdPressure = 100;                                 // 압력 센서 임계값
 const int thresholdSpeedStopTime = 3000;                           //속도센서 정지 임계값
 const int angleTuning = 8;                                         //각도 보정
@@ -70,7 +70,7 @@ void setup() {
 
 void loop() {
   int uphillOrDownhill = adjustWheelchairAngle();
-  if (checkSafety() == 0 && detectFallAndSendAlert() == 0)  // 사용자 착석감지, 넘어짐 감지
+  if (1)  // 사용자 착석감지, 넘어짐 감지
   {
     if (uphillOrDownhill == 1)  // 오르막일때
     {
@@ -147,10 +147,8 @@ int detectFallAndSendAlert() {
 // 오토 라이트 제어 함수
 void controlAutoLight() {
   int rawLightValue = analogRead(lightSensor);
-  Serial.println(rawLightValue);
   if (rawLightValue < thresholdLight) {
     digitalWrite(ledPin, HIGH);
-    Serial.println("라이트 켜짐");
   } else {
     digitalWrite(ledPin, LOW);
   }
@@ -159,7 +157,9 @@ void controlAutoLight() {
 // 장애물 감지 및 충돌 방지/긴급 정지 함수
 int detectObstacleAndStop() {
   int distance = sonar.ping_cm();
-  if (distance < thresholdLength) {
+  int filteredDistance = filterNoise(distance);
+  Serial.println(filteredDistance);
+  if (filteredDistance < thresholdLength) {
     return 1;
   } else {
     return 0;
